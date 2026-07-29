@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand orange — the splash window colour, matched to AppColors.primary. -->
+    <color name="brand_primary">#F97316</color>
+    <color name="brand_primary_dark">#C2410C</color>
+</resources>

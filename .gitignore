@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+*.db
+*.db-journal
+*.sqlite3
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+
+# Storage / uploads
+backend/storage/
+backend/logs/
+
+# Flutter / Dart
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/build/
+mobile/ios/Pods/
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/**/*.g.dart
+mobile/**/*.freezed.dart
+mobile/**/*.gr.dart
+mobile/**/*.mocks.dart
+
+# Editors / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Release signing — the keystore and its password must never be committed.
+# Losing them means no further updates to the same Play Store listing.
+mobile/android/key.properties
+mobile/android/*.jks
+mobile/android/*.keystore

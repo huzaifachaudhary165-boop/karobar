@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shown under the launcher icon. Kept short so it isn't truncated. -->
+    <string name="app_name">Karobar</string>
+</resources>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ replaced the window-background splash with a system-drawn one.
+     Using the platform API keeps the icon animation consistent with every other
+     app on the device.
+
+     Only the three `windowSplashScreen*` attributes below are real framework
+     attributes. `postSplashScreenTheme` belongs to the AndroidX splashscreen
+     library and does not exist under the `android:` namespace — declaring it
+     here fails resource linking outright, which is what broke the first release
+     build. Flutter's activity swaps to NormalTheme once the first frame is
+     drawn, so the handover still happens. -->
+<resources>
+    <style name="LaunchTheme" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:windowSplashScreenBackground">@color/brand_primary</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/brand_primary</item>
+    </style>
+
+    <style name="NormalTheme" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:windowBackground">?android:colorBackground</item>
+    </style>
+</resources>

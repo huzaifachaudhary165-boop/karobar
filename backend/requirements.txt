@@ -1,0 +1,52 @@
+# ── Web framework ────────────────────────────────────────────────
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+
+# ── Data / ORM ───────────────────────────────────────────────────
+sqlalchemy[asyncio]==2.0.36
+alembic==1.14.0
+aiosqlite==0.20.0
+asyncpg==0.30.0          # Postgres / Supabase driver
+greenlet==3.1.1
+
+# ── Validation / settings ────────────────────────────────────────
+pydantic>=2.11,<3
+pydantic-settings>=2.7,<3
+email-validator>=2.2
+
+# ── Security ─────────────────────────────────────────────────────
+passlib[bcrypt]==1.7.4
+bcrypt==4.2.1
+pyjwt==2.10.1
+cryptography==44.0.0
+
+# ── HTTP / integrations ──────────────────────────────────────────
+httpx==0.28.1
+google-auth==2.37.0
+google-auth-oauthlib==1.2.1
+google-api-python-client==2.157.0
+
+# ── AI ───────────────────────────────────────────────────────────
+
+# ── Documents ────────────────────────────────────────────────────
+jinja2>=3.1.5
+qrcode[pil]>=8.0
+pillow>=11.0
+openpyxl>=3.1.5
+# HTML→PDF. Needs GTK on Windows, so it lives in requirements-pdf.txt and the
+# code falls back to returning HTML when it is not importable.
+
+# ── Utilities ────────────────────────────────────────────────────
+python-dateutil==2.9.0.post0
+phonenumbers==8.13.52
+structlog==24.4.0
+tenacity==9.0.0
+slowapi==0.1.9
+orjson==3.10.13
+
+# ── Dev / test ───────────────────────────────────────────────────
+pytest==8.3.4
+pytest-asyncio==0.25.0
+httpx-ws==0.7.1
+ruff==0.8.6

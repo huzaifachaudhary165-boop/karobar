@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: karobar
+      POSTGRES_PASSWORD: karobar
+      POSTGRES_DB: karobar
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U karobar"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: development
+      DEBUG: "true"
+      DATABASE_URL: postgresql+asyncpg://karobar:karobar@db:5432/karobar
+      # Override in your shell or a .env file next to this compose file.
+      SECRET_KEY: ${SECRET_KEY:-dev-only-secret-change-me-before-any-real-deployment-0000}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-claude-opus-5}
+      OTP_DEV_MODE: "true"
+      CORS_ORIGINS: '["http://localhost:3000","http://localhost:8080"]'
+    ports:
+      - "8000:8000"
+    volumes:
+      - api-storage:/app/storage
+
+volumes:
+  postgres-data:
+  api-storage:

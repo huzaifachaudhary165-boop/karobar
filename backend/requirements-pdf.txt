@@ -1,0 +1,8 @@
+# Optional server-side PDF rendering.
+#   Linux/macOS : pip install -r requirements-pdf.txt   (works out of the box)
+#   Windows     : install GTK3 runtime first —
+#                 https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer
+#
+# Without this, /vouchers/{id}/pdf still works: it returns print-ready HTML and
+# the Flutter client renders the PDF locally with the `printing` package.
+weasyprint>=63.0
