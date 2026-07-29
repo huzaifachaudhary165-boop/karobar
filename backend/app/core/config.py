@@ -127,9 +127,17 @@ class Settings(BaseSettings):
 
     @property
     def storage_path(self) -> Path:
-        p = (BASE_DIR / self.STORAGE_DIR).resolve() if self.STORAGE_DIR.startswith(".") else Path(self.STORAGE_DIR)
-        p.mkdir(parents=True, exist_ok=True)
-        return p
+        """Where local uploads live. Reading this creates nothing.
+
+        It used to `mkdir` here, which made merely *reading* a setting write to
+        disk — and on a serverless host, where everything outside /tmp is
+        read-only, that raised at import time and took the whole function down
+        before a single request was served. The directory is now created by the
+        code that actually writes a file.
+        """
+        if self.STORAGE_DIR.startswith("."):
+            return (BASE_DIR / self.STORAGE_DIR).resolve()
+        return Path(self.STORAGE_DIR)
 
     @property
     def ai_configured(self) -> bool:

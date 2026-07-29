@@ -15,6 +15,7 @@ from app.core.database import close_db, init_db
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging, log
 from app.core.middleware import register_middleware
+from app.services.storage_service import storage
 
 DESCRIPTION = """
 **Karobar** — AI-powered billing, inventory and accounting for small businesses.
@@ -41,11 +42,23 @@ async def lifespan(app: FastAPI):
     for warning in settings.sanity_check():
         log.warning("config.warning", detail=warning)
 
-    if settings.ENVIRONMENT != "test":
-        # Alembic owns the schema in production; this makes local dev zero-setup.
+    # Development only. The comment always said Alembic owns the schema in
+    # production, but the condition did not — so every production boot ran
+    # `create_all` against a schema that already existed. On a serverless host
+    # that is a burst of round trips on every cold start, and two concurrent
+    # invocations can race each other doing it.
+    if settings.ENVIRONMENT == "development":
         await init_db()
 
-    settings.storage_path.mkdir(parents=True, exist_ok=True)
+    # Only when files actually land on this machine. Everything outside /tmp is
+    # read-only on a serverless host, and creating a directory nobody will write
+    # to would take the whole function down before it served a request.
+    if storage.backend == "local":
+        try:
+            settings.storage_path.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            log.warning("storage.dir_unavailable", path=str(settings.storage_path), error=str(exc))
+
     log.info("app.ready", docs="/docs" if not settings.is_production else "disabled")
 
     yield
