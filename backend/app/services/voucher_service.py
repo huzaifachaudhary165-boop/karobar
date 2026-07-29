@@ -16,7 +16,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import BusinessRuleError, ConflictError, NotFoundError
-from app.core.money import ZERO, D, money, pct, qty
+from app.core.money import ZERO, D, money, pct, qty, rupee
 from app.core.pagination import PageParams, paginate
 from app.models.base import utcnow
 from app.models.business import Business, BusinessSettings
@@ -499,8 +499,21 @@ class VoucherService(BaseService[Voucher]):
             )
             cess_rate = D(line_in.cess_rate) if line_in.cess_rate else (D(item.cess_rate) if item else ZERO)
 
+            # Tax-inclusive pricing can be declared at three levels: the shop
+            # (BusinessSettings.prices_include_tax), the document
+            # (Voucher.is_tax_inclusive), or the item itself.
+            #
+            # The item level was accepted by the API, stored, and returned in
+            # every response — but never read here, so a shopkeeper who ticked
+            # "price includes tax" on an item still got tax added on top of an
+            # already tax-inclusive rate. On an 18% item quoted at 1180 the
+            # customer was billed 1392: the setting looked like it worked and
+            # silently overcharged instead.
+            line_inclusive = inclusive or bool(item and item.price_includes_tax)
+
             breakdown = compute_line_tax(
-                net, tax_rate, interstate=interstate, inclusive=inclusive, cess_rate=cess_rate
+                net, tax_rate, interstate=interstate, inclusive=line_inclusive,
+                cess_rate=cess_rate,
             )
 
             cost = money(
@@ -585,7 +598,7 @@ class VoucherService(BaseService[Voucher]):
 
         round_off = ZERO
         if cfg.auto_round_off:
-            rounded = raw_total.quantize(Decimal("1"))
+            rounded = rupee(raw_total)
             round_off = money(rounded - raw_total)
             raw_total = money(rounded)
 

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/assistant/assistant_screen.dart';
 import '../../features/assistant/scan_screen.dart';
+import '../../features/auth/forgot_password_screen.dart';
 import '../../features/auth/login_screen.dart';
 import '../../features/auth/register_screen.dart';
 import '../../features/auth/splash_screen.dart';
@@ -31,6 +32,7 @@ abstract final class Routes {
   static const onboarding = 'onboarding';
   static const login = 'login';
   static const register = 'register';
+  static const forgotPassword = 'forgot-password';
   static const home = 'home';
   static const parties = 'parties';
   static const partyDetail = 'party-detail';
@@ -55,14 +57,18 @@ abstract final class Routes {
 
 final routerProvider = Provider<GoRouter>((ref) {
   final session = ref.watch(sessionProvider);
-  final onboarded = ref.watch(tokenStoreProvider).onboarded;
+  final onboarded = ref.watch(onboardedProvider);
 
   return GoRouter(
     initialLocation: '/',
     debugLogDiagnostics: false,
     redirect: (context, state) {
       final path = state.matchedLocation;
-      final onAuthScreen = path == '/login' || path == '/register';
+      // Every screen a signed-out person is allowed to be on. Leaving one out
+      // means the redirect below bounces them back to /login the instant they
+      // arrive — the screen opens and closes and looks like a dead button.
+      const signedOutScreens = {'/login', '/register', '/forgot-password'};
+      final onAuthScreen = signedOutScreens.contains(path);
 
       // Still restoring from disk — hold on the splash.
       if (session.status == AuthStatus.unknown) return path == '/' ? null : '/';
@@ -103,6 +109,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/register',
         name: Routes.register,
         builder: (_, __) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: '/forgot-password',
+        name: Routes.forgotPassword,
+        builder: (_, __) => const ForgotPasswordScreen(),
       ),
       GoRoute(
         path: '/home',

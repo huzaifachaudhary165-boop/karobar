@@ -2,7 +2,7 @@
 <!-- Splash shown before the Flutter engine is ready: brand orange with the
      white mark centred, so the handoff to SplashScreen is invisible. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@color/brand_primary" />
+    <item android:drawable="@color/brand_splash" />
     <item>
         <bitmap
             android:gravity="center"

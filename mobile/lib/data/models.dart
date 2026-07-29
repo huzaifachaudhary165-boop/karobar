@@ -160,6 +160,36 @@ class AuthSession {
   }
 }
 
+/// The server's answer to "send a one-time code".
+///
+/// [delivered] is the part that matters: the code is valid whether or not the
+/// email went out, so the screen uses this to avoid telling someone to go and
+/// check an inbox when the send actually failed.
+class OtpSent {
+  const OtpSent({
+    required this.message,
+    required this.delivered,
+    this.expiresIn = 300,
+    this.debugCode,
+  });
+
+  final String message;
+  final bool delivered;
+  final int expiresIn;
+
+  /// Only ever set while the server runs in dev mode.
+  final String? debugCode;
+
+  factory OtpSent.fromJson(Map<String, dynamic> json) => OtpSent(
+        message: _str(json['message']),
+        // Absent on an older server; assume it went out rather than alarm
+        // someone whose code is on its way.
+        delivered: json['delivered'] == null || _bool(json['delivered']),
+        expiresIn: json['expires_in'] == null ? 300 : asNum(json['expires_in']).toInt(),
+        debugCode: json['debug_code'] as String?,
+      );
+}
+
 // ── parties ──────────────────────────────────────────────────────
 class Party {
   const Party({

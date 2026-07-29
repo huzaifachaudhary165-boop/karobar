@@ -128,8 +128,19 @@ abstract final class AppTheme {
       ),
       chipTheme: ChipThemeData(
         backgroundColor: isDark ? AppColors.darkSurfaceAlt : AppColors.surfaceAlt,
-        selectedColor: AppColors.primaryLight,
+        // primaryLight is a near-white cream built for a white page. A chip's
+        // label is painted in `onSurface`, which in dark mode is also near
+        // white — so every selected filter chip on every list screen was
+        // white text on a cream pill, i.e. blank. softTint resolves to a deep
+        // orange-brown on a dark page and a pale peach on a light one, and the
+        // label stays readable on both.
+        selectedColor: AppColors.softTint(AppColors.primary, brightness),
+        checkmarkColor: AppColors.onSoftTint(AppColors.primary, brightness),
         labelStyle: text.labelLarge!,
+        secondaryLabelStyle: text.labelLarge!.copyWith(
+          color: AppColors.onSoftTint(AppColors.primary, brightness),
+          fontWeight: FontWeight.w700,
+        ),
         side: BorderSide(color: scheme.outline),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -174,8 +185,13 @@ abstract final class AppTheme {
       progressIndicatorTheme: const ProgressIndicatorThemeData(color: AppColors.primary),
       segmentedButtonTheme: SegmentedButtonThemeData(
         style: SegmentedButton.styleFrom(
-          selectedBackgroundColor: AppColors.primaryLight,
-          selectedForegroundColor: AppColors.primaryDarker,
+          // Same reasoning as the chips: a fixed cream pill belongs to the
+          // light theme only. primaryDarker on it happens to stay legible, but
+          // it puts a bright white-ish block in the middle of a dark screen.
+          selectedBackgroundColor: AppColors.softTint(AppColors.primary, brightness),
+          selectedForegroundColor: AppColors.onSoftTint(AppColors.primary, brightness),
+          foregroundColor: scheme.onSurface,
+          side: BorderSide(color: scheme.outline),
         ),
       ),
     );

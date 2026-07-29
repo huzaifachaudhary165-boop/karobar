@@ -231,29 +231,40 @@ class _Body extends ConsumerWidget {
 
         if (voucher.fromAi) ...[
           const SizedBox(height: 10),
-          AppCard(
-            color: AppColors.primarySurface,
-            borderColor: AppColors.softTint(AppColors.primary, Theme.of(context).brightness),
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                const Icon(Icons.auto_awesome, size: 16, color: AppColors.primaryDarker),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    voucher.source == 'ocr'
-                        ? 'Created from a scanned bill'
-                        : 'Created by the assistant',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.primaryDarker,
-                      fontWeight: FontWeight.w600,
+          Builder(builder: (context) {
+            // primarySurface is a near-white wash and primaryDarker is a deep
+            // orange: fine together on a white page, but on a dark one this
+            // became a glaring pale block. The tint pair adapts to both.
+            final brightness = Theme.of(context).brightness;
+            final tint = AppColors.softTint(AppColors.primary, brightness);
+            final onTint = AppColors.onSoftTint(AppColors.primary, brightness);
+
+            return AppCard(
+              color: tint,
+              borderColor: tint,
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Icon(Icons.auto_awesome, size: 16, color: onTint),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      context.t(
+                        voucher.source == 'ocr'
+                            ? 'Created from a scanned bill'
+                            : 'Created by the assistant',
+                      ),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: onTint,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
+                ],
+              ),
+            );
+          }),
         ],
 
         const SizedBox(height: 16),

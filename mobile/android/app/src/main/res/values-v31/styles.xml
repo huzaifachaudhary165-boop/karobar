@@ -11,9 +11,9 @@
      drawn, so the handover still happens. -->
 <resources>
     <style name="LaunchTheme" parent="@android:style/Theme.DeviceDefault.DayNight">
-        <item name="android:windowSplashScreenBackground">@color/brand_primary</item>
+        <item name="android:windowSplashScreenBackground">@color/brand_splash</item>
         <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
-        <item name="android:windowSplashScreenIconBackgroundColor">@color/brand_primary</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/brand_splash</item>
     </style>
 
     <style name="NormalTheme" parent="@android:style/Theme.DeviceDefault.DayNight">

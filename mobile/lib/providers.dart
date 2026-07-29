@@ -242,6 +242,20 @@ final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeMode>(
   (ref) => ThemeModeNotifier(ref.watch(tokenStoreProvider)),
 );
 
+/// Whether the first-launch tour has been seen.
+///
+/// The router needs this to decide between the tour and the sign-in screen, and
+/// it needs to be *told* when it changes. `tokenStoreProvider` is overridden
+/// with a single instance in `main()`, so watching it hands back the same
+/// object forever and never fires again: writing `onboarded` to disk left the
+/// router still believing the tour was unfinished, and it redirected straight
+/// back to it. That is what made Skip and Get started look like dead buttons.
+///
+/// Disk stays the source of truth across launches; this mirrors it within one.
+final onboardedProvider = StateProvider<bool>(
+  (ref) => ref.watch(tokenStoreProvider).onboarded,
+);
+
 class ThemeModeNotifier extends StateNotifier<ThemeMode> {
   ThemeModeNotifier(this._store) : super(_parse(_store.themeMode));
 
@@ -321,14 +335,18 @@ final partiesProvider = StreamProvider.autoDispose<Paged<Party>>((ref) {
 });
 
 final partyProvider =
-    FutureProvider.autoDispose.family<Party, String>((ref, id) async {
-  return ref.watch(partyRepositoryProvider).get(id);
+    StreamProvider.autoDispose.family<Party, String>((ref, id) {
+  final repository = ref.watch(partyRepositoryProvider);
+  return _cachedThenFresh<Party>((emit) => repository.get(id, onCached: emit));
 });
 
 final partyLedgerProvider =
-    FutureProvider.autoDispose.family<List<LedgerEntry>, String>((ref, id) async {
-  final (entries, _) = await ref.watch(partyRepositoryProvider).ledger(id);
-  return entries;
+    StreamProvider.autoDispose.family<List<LedgerEntry>, String>((ref, id) {
+  final repository = ref.watch(partyRepositoryProvider);
+  return _cachedThenFresh<List<LedgerEntry>>((emit) async {
+    final (entries, _) = await repository.ledger(id, onCached: emit);
+    return entries;
+  });
 });
 
 final itemSearchProvider = StateProvider.autoDispose<String>((ref) => '');
@@ -346,8 +364,9 @@ final itemsProvider = StreamProvider.autoDispose<Paged<Item>>((ref) {
       ));
 });
 
-final itemProvider = FutureProvider.autoDispose.family<Item, String>((ref, id) async {
-  return ref.watch(itemRepositoryProvider).get(id);
+final itemProvider = StreamProvider.autoDispose.family<Item, String>((ref, id) {
+  final repository = ref.watch(itemRepositoryProvider);
+  return _cachedThenFresh<Item>((emit) => repository.get(id, onCached: emit));
 });
 
 final voucherTypeProvider = StateProvider.autoDispose<String>((ref) => 'sale');
@@ -370,13 +389,17 @@ final vouchersProvider = StreamProvider.autoDispose<Paged<Voucher>>((ref) {
 });
 
 final voucherProvider =
-    FutureProvider.autoDispose.family<Voucher, String>((ref, id) async {
-  return ref.watch(voucherRepositoryProvider).get(id);
+    StreamProvider.autoDispose.family<Voucher, String>((ref, id) {
+  final repository = ref.watch(voucherRepositoryProvider);
+  return _cachedThenFresh<Voucher>((emit) => repository.get(id, onCached: emit));
 });
 
 final stockSummaryProvider =
-    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
-  return ref.watch(itemRepositoryProvider).stockSummary();
+    StreamProvider.autoDispose<Map<String, dynamic>>((ref) {
+  final repository = ref.watch(itemRepositoryProvider);
+  return _cachedThenFresh<Map<String, dynamic>>(
+    (emit) => repository.stockSummary(onCached: emit),
+  );
 });
 
 final insightsProvider = FutureProvider.autoDispose<List<Insight>>((ref) async {
@@ -388,20 +411,27 @@ final aiSuggestionsProvider = FutureProvider.autoDispose<List<String>>((ref) asy
   return ref.watch(aiRepositoryProvider).suggestions(language: language);
 });
 
-final expensesProvider = FutureProvider.autoDispose<Paged<Expense>>((ref) async {
-  return ref.watch(expenseRepositoryProvider).list();
+final expensesProvider = StreamProvider.autoDispose<Paged<Expense>>((ref) {
+  final repository = ref.watch(expenseRepositoryProvider);
+  return _cachedThenFresh<Paged<Expense>>((emit) => repository.list(onCached: emit));
 });
 
 final expenseCategoriesProvider =
-    FutureProvider.autoDispose<List<ExpenseCategory>>((ref) async {
-  return ref.watch(expenseRepositoryProvider).categories();
+    StreamProvider.autoDispose<List<ExpenseCategory>>((ref) {
+  final repository = ref.watch(expenseRepositoryProvider);
+  return _cachedThenFresh<List<ExpenseCategory>>(
+    (emit) => repository.categories(onCached: emit),
+  );
 });
 
 final paymentDirectionProvider = StateProvider.autoDispose<String?>((ref) => null);
 
-final paymentsProvider = FutureProvider.autoDispose<Paged<Payment>>((ref) async {
+final paymentsProvider = StreamProvider.autoDispose<Paged<Payment>>((ref) {
   final direction = ref.watch(paymentDirectionProvider);
-  return ref.watch(paymentRepositoryProvider).list(direction: direction);
+  final repository = ref.watch(paymentRepositoryProvider);
+  return _cachedThenFresh<Paged<Payment>>(
+    (emit) => repository.list(direction: direction, onCached: emit),
+  );
 });
 
 /// Refreshed on demand — `refresh()` reconciles against live business state, so a

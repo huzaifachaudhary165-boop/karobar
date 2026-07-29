@@ -150,8 +150,9 @@ class KarobarLogo extends StatelessWidget {
   Widget build(BuildContext context) {
     final metrics = size.metrics;
     final wordColor = onDark ? AppColors.white : AppColors.textPrimary;
+    // Was 0.75, which on the old pale backdrop left "KAROBAR" barely present.
     final subtitleColor =
-        onDark ? AppColors.white.withValues(alpha: 0.75) : AppColors.textMuted;
+        onDark ? AppColors.white.withValues(alpha: 0.92) : AppColors.textMuted;
 
     final wordmark = Column(
       crossAxisAlignment:
@@ -168,9 +169,20 @@ class KarobarLogo extends StatelessWidget {
             style: TextStyle(
               fontSize: metrics.urdu,
               height: 1.6,
-              fontWeight: FontWeight.w700,
+              // Heavier on a coloured backdrop: Urdu strokes are fine and thin,
+              // and they are the first thing to disappear against orange.
+              fontWeight: onDark ? FontWeight.w800 : FontWeight.w700,
               color: wordColor,
               letterSpacing: 0,
+              shadows: onDark
+                  ? [
+                      Shadow(
+                        color: Colors.black.withValues(alpha: 0.22),
+                        blurRadius: metrics.urdu * 0.14,
+                        offset: Offset(0, metrics.urdu * 0.035),
+                      ),
+                    ]
+                  : null,
             ),
           ),
         ),
@@ -219,6 +231,15 @@ enum LogoSize {
 }
 
 /// Decorative background used behind the splash and auth screens.
+///
+/// This was a flat `AppColors.primary`. White on that orange measures about
+/// 2.8:1 — under every legibility threshold there is — and the wordmark read as
+/// washed out, especially outdoors where these phones are actually used.
+///
+/// The fix is the backdrop rather than the text: a darker wordmark on orange is
+/// *worse* (deep orange on orange is roughly 1.85:1). Deepening the background
+/// takes white to about 5.2:1 at the bottom and 3.6:1 at the top, so the logo
+/// reads as solid and deliberate instead of faint.
 class BrandBackdrop extends StatelessWidget {
   const BrandBackdrop({super.key, required this.child});
 
@@ -228,7 +249,17 @@ class BrandBackdrop extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        const Positioned.fill(child: ColoredBox(color: AppColors.primary)),
+        const Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [AppColors.primaryDark, AppColors.primaryDarker],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+          ),
+        ),
         Positioned(
           top: -90,
           right: -70,

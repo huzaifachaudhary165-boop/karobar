@@ -28,19 +28,54 @@ class TokenStore {
 
   final SharedPreferences _prefs;
 
+  // Reading a key out of the OS keystore is a platform-channel round trip plus
+  // a decrypt. Every outgoing request needs the access token, so paying that
+  // cost per request put tens of milliseconds in front of *every* screen —
+  // felt as the app being uniformly sluggish rather than as one slow feature.
+  //
+  // The token is held in memory after the first read. It is already in this
+  // process's memory the moment it is used as a header, so keeping it there
+  // gives an attacker who can read our heap nothing they did not already have;
+  // the keystore is what protects it at rest, and it still does.
+  String? _accessCache;
+  String? _refreshCache;
+  bool _accessLoaded = false;
+  bool _refreshLoaded = false;
+
   static Future<TokenStore> create() async =>
       TokenStore(await SharedPreferences.getInstance());
 
   // ── tokens ─────────────────────────────────────────────────────
-  Future<String?> get accessToken => _secure.read(key: _kAccess);
-  Future<String?> get refreshToken => _secure.read(key: _kRefresh);
+  Future<String?> get accessToken async {
+    if (_accessLoaded) return _accessCache;
+    _accessCache = await _secure.read(key: _kAccess);
+    _accessLoaded = true;
+    return _accessCache;
+  }
+
+  Future<String?> get refreshToken async {
+    if (_refreshLoaded) return _refreshCache;
+    _refreshCache = await _secure.read(key: _kRefresh);
+    _refreshLoaded = true;
+    return _refreshCache;
+  }
 
   Future<void> saveTokens({required String access, required String refresh}) async {
+    // Memory first: a refresh that lands mid-flight must not let another
+    // request read the old token back out of the cache while the write is
+    // still in progress.
+    _accessCache = access;
+    _refreshCache = refresh;
+    _accessLoaded = _refreshLoaded = true;
+
     await _secure.write(key: _kAccess, value: access);
     await _secure.write(key: _kRefresh, value: refresh);
   }
 
   Future<void> clearTokens() async {
+    _accessCache = _refreshCache = null;
+    _accessLoaded = _refreshLoaded = true;
+
     await _secure.delete(key: _kAccess);
     await _secure.delete(key: _kRefresh);
   }
@@ -74,12 +109,20 @@ class TokenStore {
   bool can(String permission) => permissions.isEmpty || permissions.contains(permission);
 
   /// A stable per-install id — the sync engine keys every cursor on it.
+  ///
+  /// Held in memory because it is read on every outgoing request and, once
+  /// generated, never changes for the life of the install.
+  String? _deviceIdCache;
+
   Future<String> deviceId() async {
+    if (_deviceIdCache != null) return _deviceIdCache!;
+
     final existing = _prefs.getString(_kDevice);
-    if (existing != null) return existing;
+    if (existing != null) return _deviceIdCache = existing;
+
     final generated = 'dev_${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}';
     await _prefs.setString(_kDevice, generated);
-    return generated;
+    return _deviceIdCache = generated;
   }
 
   int get syncSeq => _prefs.getInt(_kSyncSeq) ?? 0;

@@ -25,6 +25,13 @@ abstract final class AppColors {
   static const Color textOnPrimary = Color(0xFFFFFFFF);
 
   // Semantic — money in and money out are the two colours users read fastest.
+  //
+  // The `*Light` and `primaryLight`/`primarySurface` washes below are LIGHT
+  // THEME ONLY. They are near-white by design, so on a dark page they render as
+  // the brightest thing on screen with near-white text on top — invisible.
+  // Reach for `softTint(accent, brightness)` and `onSoftTint(...)` instead;
+  // they produce the same effect and adapt. These stay only because the
+  // `ColorScheme` needs fixed light-theme container colours.
   static const Color success = Color(0xFF16A34A);
   static const Color successLight = Color(0xFFDCFCE7);
   static const Color danger = Color(0xFFDC2626);

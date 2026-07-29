@@ -154,6 +154,10 @@ class AuthResponse(ORMModel):
 class OtpSentResponse(ORMModel):
     message: str
     expires_in: int
+    # False when the mail or SMS send failed. The code is still valid — the
+    # client uses this to say "we could not send it" instead of pointing the
+    # user at an inbox that will stay empty.
+    delivered: bool = True
     # only populated when OTP_DEV_MODE is on
     debug_code: str | None = None
 

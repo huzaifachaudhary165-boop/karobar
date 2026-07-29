@@ -6,6 +6,7 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
 ZERO = Decimal("0")
+ONE = Decimal("1")
 CENT = Decimal("0.01")
 QTY_Q = Decimal("0.0001")
 HUNDRED = Decimal("100")
@@ -32,6 +33,18 @@ def money(value: Any) -> Decimal:
 
 def qty(value: Any) -> Decimal:
     return D(value).quantize(QTY_Q, rounding=ROUND_HALF_UP)
+
+
+def rupee(value: Any) -> Decimal:
+    """Round to a whole unit of currency, for invoice round-off.
+
+    Explicitly HALF_UP, like every other rounding here. Calling `.quantize()`
+    without a rounding mode silently uses the decimal context default, which is
+    ROUND_HALF_EVEN — so a bill of 9652.50 rounded *down* to 9652 while 9653.50
+    rounded *up* to 9654. A shopkeeper reading two bills side by side has no way
+    to explain that, and half-rupee totals are not rare.
+    """
+    return D(value).quantize(ONE, rounding=ROUND_HALF_UP)
 
 
 def pct(base: Any, percent: Any) -> Decimal:

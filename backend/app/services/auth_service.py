@@ -107,6 +107,30 @@ class AuthService:
         target = normalise_phone(identifier) if is_phone_like(identifier) else identifier.strip().lower()
         channel = "sms" if is_phone_like(identifier) else "email"
 
+        if purpose == "reset_password":
+            # Say up front that there is no such account. This does tell an
+            # anonymous caller which addresses are registered, which is a real
+            # (if mild) disclosure — the alternative is a shopkeeper who typed
+            # the wrong address staring at an inbox, waiting for a code that was
+            # never going to arrive, with nothing on screen to suggest why.
+            # For a shop app that trade is worth making; rate limiting is the
+            # right defence against someone mining the endpoint.
+            if await self._find_by_identifier(target) is None:
+                raise NotFoundError(
+                    "No account is registered with that email or phone number. "
+                    "Check the spelling, or create a new account."
+                )
+
+            # Nor should it promise a code down a channel that cannot carry one.
+            if channel == "sms" and not settings.OTP_DEV_MODE:
+                from app.integrations.sms import SmsSender  # noqa: PLC0415
+
+                if not SmsSender().configured:
+                    raise ValidationError(
+                        "Password reset by SMS is not available yet. "
+                        "Use the email address on your account instead."
+                    )
+
         # invalidate any live challenge for the same identifier+purpose
         for row in (
             await self.db.execute(
@@ -135,8 +159,18 @@ class AuthService:
         delivered = await self._deliver_otp(target, code, channel)
         log.info("auth.otp_sent", identifier=target[-4:], channel=channel, delivered=delivered)
 
+        # "Code sent" when nothing was sent leaves someone waiting on an inbox
+        # that will stay empty. The code is valid either way — in dev mode it
+        # comes back in `debug_code` — so the honest message still lets them
+        # continue, it just does not send them somewhere pointless to look.
         return {
-            "message": f"Verification code sent to {_mask(target)}.",
+            "message": (
+                f"Verification code sent to {_mask(target)}."
+                if delivered
+                else f"Could not send the code to {_mask(target)} right now. "
+                "Please check the address and try again."
+            ),
+            "delivered": delivered,
             "expires_in": settings.OTP_TTL_SECONDS,
             "debug_code": code if settings.OTP_DEV_MODE else None,
         }

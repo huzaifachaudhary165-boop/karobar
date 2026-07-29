@@ -66,6 +66,31 @@ class AuthRepository {
     return (data as Map)['debug_code'] as String?;
   }
 
+  /// Asks the server to email a reset code.
+  ///
+  /// Throws if no account is registered for [identifier] — that check happens
+  /// before anything is sent, so the screen can say so while the user is still
+  /// looking at the field they typed it into.
+  Future<OtpSent> sendResetCode(String identifier) async {
+    final data = await _api.post('/auth/otp/send', body: {
+      'identifier': identifier,
+      'purpose': 'reset_password',
+    });
+    return OtpSent.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<void> resetPassword({
+    required String identifier,
+    required String code,
+    required String newPassword,
+  }) async {
+    await _api.post('/auth/reset-password', body: {
+      'identifier': identifier,
+      'code': code,
+      'new_password': newPassword,
+    });
+  }
+
   Future<AuthSession> verifyOtp(String identifier, String code, {String? name}) async {
     final data = await _api.post('/auth/otp/verify', body: {
       'identifier': identifier,
@@ -122,6 +147,39 @@ void Function(dynamic)? _parsed<T>(
   };
 }
 
+/// The same bridge for an endpoint that returns one object rather than a page.
+///
+/// Detail screens — an invoice, a customer, an item — used to have no cache
+/// path at all, so opening one always meant a spinner for the length of a full
+/// round trip even though the list it was opened from had just shown the same
+/// figures.
+void Function(dynamic)? _parsedOne<T>(
+  void Function(T)? onCached,
+  T Function(Map<String, dynamic>) fromJson,
+) {
+  if (onCached == null) return null;
+  return (raw) {
+    try {
+      onCached(fromJson(Map<String, dynamic>.from(raw as Map)));
+    } catch (_) {}
+  };
+}
+
+/// And for one that returns a bare JSON list.
+void Function(dynamic)? _parsedList<T>(
+  void Function(List<T>)? onCached,
+  T Function(Map<String, dynamic>) fromJson,
+) {
+  if (onCached == null) return null;
+  return (raw) {
+    try {
+      onCached((raw as List)
+          .map((e) => fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList());
+    } catch (_) {}
+  };
+}
+
 class PartyRepository {
   PartyRepository(this._api);
 
@@ -160,8 +218,9 @@ class PartyRepository {
         .toList();
   }
 
-  Future<Party> get(String id) async {
-    final data = await _api.get('/parties/$id');
+  Future<Party> get(String id, {void Function(Party)? onCached}) async {
+    final data = await _api.get('/parties/$id',
+        onCached: _parsedOne(onCached, Party.fromJson));
     return Party.fromJson(Map<String, dynamic>.from(data as Map));
   }
 
@@ -177,8 +236,27 @@ class PartyRepository {
 
   Future<void> delete(String id) => _api.delete('/parties/$id');
 
-  Future<(List<LedgerEntry>, num)> ledger(String id) async {
-    final data = Map<String, dynamic>.from(await _api.get('/parties/$id/ledger') as Map);
+  Future<(List<LedgerEntry>, num)> ledger(
+    String id, {
+    void Function(List<LedgerEntry>)? onCached,
+  }) async {
+    final data = Map<String, dynamic>.from(
+      await _api.get(
+        '/parties/$id/ledger',
+        onCached: onCached == null
+            ? null
+            : (raw) {
+                try {
+                  onCached(
+                    ((raw as Map)['entries'] as List? ?? [])
+                        .map((e) =>
+                            LedgerEntry.fromJson(Map<String, dynamic>.from(e as Map)))
+                        .toList(),
+                  );
+                } catch (_) {}
+              },
+      ) as Map,
+    );
     final entries = (data['entries'] as List? ?? [])
         .map((e) => LedgerEntry.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
@@ -220,8 +298,9 @@ class ItemRepository {
         .toList();
   }
 
-  Future<Item> get(String id) async {
-    final data = await _api.get('/items/$id');
+  Future<Item> get(String id, {void Function(Item)? onCached}) async {
+    final data =
+        await _api.get('/items/$id', onCached: _parsedOne(onCached, Item.fromJson));
     return Item.fromJson(Map<String, dynamic>.from(data as Map));
   }
 
@@ -251,8 +330,21 @@ class ItemRepository {
     return Item.fromJson(Map<String, dynamic>.from(data as Map));
   }
 
-  Future<Map<String, dynamic>> stockSummary() async =>
-      Map<String, dynamic>.from(await _api.get('/items/stock/summary') as Map);
+  Future<Map<String, dynamic>> stockSummary({
+    void Function(Map<String, dynamic>)? onCached,
+  }) async =>
+      Map<String, dynamic>.from(
+        await _api.get(
+          '/items/stock/summary',
+          onCached: onCached == null
+              ? null
+              : (raw) {
+                  try {
+                    onCached(Map<String, dynamic>.from(raw as Map));
+                  } catch (_) {}
+                },
+        ) as Map,
+      );
 }
 
 class VoucherRepository {
@@ -291,8 +383,9 @@ class VoucherRepository {
     return Paged.fromJson(Map<String, dynamic>.from(data as Map), Voucher.fromJson);
   }
 
-  Future<Voucher> get(String id) async {
-    final data = await _api.get('/vouchers/$id');
+  Future<Voucher> get(String id, {void Function(Voucher)? onCached}) async {
+    final data = await _api.get('/vouchers/$id',
+        onCached: _parsedOne(onCached, Voucher.fromJson));
     return Voucher.fromJson(Map<String, dynamic>.from(data as Map));
   }
 
@@ -339,8 +432,14 @@ class PaymentRepository {
 
   final ApiClient _api;
 
-  Future<Paged<Payment>> list({int page = 1, String? direction, String? partyId}) async {
-    final data = await _api.get('/payments', query: {
+  Future<Paged<Payment>> list({
+    int page = 1,
+    String? direction,
+    String? partyId,
+    void Function(Paged<Payment>)? onCached,
+  }) async {
+    final data = await _api.get('/payments',
+        onCached: _parsed(onCached, Payment.fromJson), query: {
       'page': page,
       'size': 25,
       'direction': direction,
@@ -388,8 +487,10 @@ class ExpenseRepository {
     String? search,
     DateTime? startDate,
     DateTime? endDate,
+    void Function(Paged<Expense>)? onCached,
   }) async {
-    final data = await _api.get('/expenses', query: {
+    final data = await _api.get('/expenses',
+        onCached: _parsed(onCached, Expense.fromJson), query: {
       'page': page,
       'size': size,
       'category_id': categoryId,
@@ -409,8 +510,11 @@ class ExpenseRepository {
 
   Future<void> delete(String id) => _api.delete('/expenses/$id');
 
-  Future<List<ExpenseCategory>> categories() async {
-    final data = await _api.get('/expenses/categories');
+  Future<List<ExpenseCategory>> categories({
+    void Function(List<ExpenseCategory>)? onCached,
+  }) async {
+    final data = await _api.get('/expenses/categories',
+        onCached: _parsedList(onCached, ExpenseCategory.fromJson));
     return (data as List)
         .map((e) => ExpenseCategory.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();

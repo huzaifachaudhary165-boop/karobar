@@ -31,7 +31,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   Future<void> _finish() async {
+    // Both, and in this order. Disk is what survives a restart; the provider is
+    // what tells the router to stop redirecting here. Writing only to disk is
+    // what made this button appear to do nothing at all.
     await ref.read(tokenStoreProvider).setOnboarded(true);
+    ref.read(onboardedProvider.notifier).state = true;
     if (mounted) context.go('/login');
   }
 

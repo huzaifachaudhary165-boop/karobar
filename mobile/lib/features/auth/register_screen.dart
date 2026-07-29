@@ -4,8 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/l10n/strings.dart';
+import '../../core/utils/validators.dart';
 import '../../core/widgets/common.dart';
-import '../../core/widgets/google_button.dart';
 import '../../core/widgets/karobar_logo.dart';
 import '../../providers.dart';
 
@@ -99,27 +99,38 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: _step == 0 ? () => context.goNamed(Routes.login) : _back,
-        ),
-        title: const KarobarLogo(size: LogoSize.small, showSubtitle: false),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(3),
-          child: LinearProgressIndicator(
-            value: _step == 0 ? 0.5 : 1,
-            minHeight: 3,
-            backgroundColor: Theme.of(context).colorScheme.outlineVariant,
+    return PopScope(
+      // On step 2 the system back button must return to step 1. Left alone it
+      // closes the whole screen and throws away everything already typed.
+      canPop: _step == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _back();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            tooltip: context.t('Back'),
+            onPressed: _busy
+                ? null
+                : (_step == 0 ? () => context.goNamed(Routes.login) : _back),
+          ),
+          title: const KarobarLogo(size: LogoSize.small, showSubtitle: false),
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(3),
+            child: LinearProgressIndicator(
+              value: _step == 0 ? 0.5 : 1,
+              minHeight: 3,
+              backgroundColor: Theme.of(context).colorScheme.outlineVariant,
+            ),
           ),
         ),
-      ),
-      body: SafeArea(
-        child: PageView(
-          controller: _pageController,
-          physics: const NeverScrollableScrollPhysics(),
-          children: [_accountStep(), _businessStep()],
+        body: SafeArea(
+          child: PageView(
+            controller: _pageController,
+            physics: const NeverScrollableScrollPhysics(),
+            children: [_accountStep(), _businessStep()],
+          ),
         ),
       ),
     );
@@ -137,12 +148,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Create your account',
+                context.t('Create your account'),
                 style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 6),
               Text(
-                'Step 1 of 2 — your details',
+                context.t('Step 1 of 2 — your details'),
                 style: theme.textTheme.bodyMedium
                     ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
@@ -151,73 +162,80 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 controller: _name,
                 textCapitalization: TextCapitalization.words,
                 textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: 'Your name',
-                  prefixIcon: Icon(Icons.person_outline),
-                ),
-                validator: (value) => (value == null || value.trim().length < 2)
-                    ? 'Enter your name'
-                    : null,
-              ),
-              const SizedBox(height: 14),
-              TextFormField(
-                controller: _phone,
-                keyboardType: TextInputType.phone,
-                textInputAction: TextInputAction.next,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
                 decoration: InputDecoration(
-                  labelText: context.t('Phone number'),
-                  hintText: '03001234567',
-                  prefixIcon: const Icon(Icons.phone_outlined),
+                  labelText: context.t('Your name'),
+                  prefixIcon: const Icon(Icons.person_outline),
                 ),
-                validator: (value) {
-                  if ((value == null || value.trim().isEmpty) &&
-                      _email.text.trim().isEmpty) {
-                    return 'Enter a phone number or an email address';
-                  }
-                  return null;
-                },
+                validator: Validators.minLength(context, 'Your name', 2),
               ),
               const SizedBox(height: 14),
+
+              // Email first, and required. Password reset only works by email —
+              // no SMS provider is configured — so an account created with a
+              // phone number alone can never be recovered.
               TextFormField(
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
                 textInputAction: TextInputAction.next,
+                autocorrect: false,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
                 decoration: InputDecoration(
-                  labelText: context.t('Email (optional)'),
+                  labelText: context.t('Email address'),
+                  helperText: context.t('Used to reset your password if you forget it'),
                   prefixIcon: const Icon(Icons.mail_outline),
                 ),
+                validator: Validators.email(context),
+              ),
+              const SizedBox(height: 14),
+
+              TextFormField(
+                controller: _phone,
+                keyboardType: TextInputType.phone,
+                textInputAction: TextInputAction.next,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                decoration: InputDecoration(
+                  labelText: context.t('Phone number (optional)'),
+                  hintText: '03001234567',
+                  prefixIcon: const Icon(Icons.phone_outlined),
+                ),
                 validator: (value) {
-                  if (value == null || value.trim().isEmpty) return null;
-                  return value.contains('@') ? null : 'Enter a valid email address';
+                  final text = (value ?? '').trim();
+                  if (text.isEmpty) return null;
+                  return RegExp(r'^\+?[\d\s-]{7,20}$').hasMatch(text)
+                      ? null
+                      : context.t('Enter a valid phone number');
                 },
               ),
               const SizedBox(height: 14),
+
               TextFormField(
                 controller: _password,
                 obscureText: _obscure,
                 textInputAction: TextInputAction.done,
+                autofillHints: const [AutofillHints.newPassword],
+                autovalidateMode: AutovalidateMode.onUserInteraction,
                 decoration: InputDecoration(
                   labelText: context.t('Password'),
-                  helperText: 'At least 8 characters, with a number',
                   prefixIcon: const Icon(Icons.lock_outline),
                   suffixIcon: IconButton(
                     icon: Icon(
                       _obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
                     ),
+                    tooltip: context.t(_obscure ? 'Show password' : 'Hide password'),
                     onPressed: () => setState(() => _obscure = !_obscure),
                   ),
                 ),
-                validator: (value) {
-                  if (value == null || value.length < 8) return 'At least 8 characters';
-                  if (!value.contains(RegExp(r'\d'))) return 'Include at least one number';
-                  return null;
-                },
+                // Shared with the reset screen and matched to the backend rule.
+                // The old validator here checked length and a digit but not a
+                // letter, so "12345678" passed the form and was then rejected
+                // by the server with nothing attached to the field.
+                validator: Validators.password(context),
+                onChanged: (_) => setState(() {}),
               ),
+              PasswordStrengthHint(password: _password.text),
               const SizedBox(height: 26),
               FilledButton(onPressed: _next, child: Text(context.t('Continue'))),
-              // Google signs the user straight in and creates their shop, so it
-              // sits on the first step rather than after the shop-details step.
-              const GoogleButton(),
             ],
           ),
         ),
@@ -237,12 +255,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Set up your shop',
+                context.t('Set up your shop'),
                 style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 6),
               Text(
-                'Step 2 of 2 — you can change all of this later',
+                context.t('Step 2 of 2 — you can change all of this later'),
                 style: theme.textTheme.bodyMedium
                     ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
@@ -250,13 +268,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               TextFormField(
                 controller: _businessName,
                 textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
-                  labelText: 'Shop / business name',
-                  prefixIcon: Icon(Icons.storefront_outlined),
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                decoration: InputDecoration(
+                  labelText: context.t('Shop / business name'),
+                  prefixIcon: const Icon(Icons.storefront_outlined),
                 ),
-                validator: (value) => (value == null || value.trim().length < 2)
-                    ? 'Enter your business name'
-                    : null,
+                validator: Validators.minLength(context, 'Shop / business name', 2),
               ),
               const SizedBox(height: 14),
               DropdownButtonFormField<String>(
