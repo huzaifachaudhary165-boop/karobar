@@ -277,26 +277,44 @@ class AuthService:
         ).scalar_one_or_none() is not None
 
     async def _verify_google_token(self, id_token: str) -> dict[str, Any]:
-        """Prefer local signature verification; fall back to Google's tokeninfo."""
-        if settings.GOOGLE_CLIENT_ID:
-            try:
-                from google.auth.transport import requests as g_requests  # noqa: PLC0415
-                from google.oauth2 import id_token as g_id_token  # noqa: PLC0415
+        """Prefer local signature verification; fall back to Google's tokeninfo.
 
-                return g_id_token.verify_oauth2_token(
-                    id_token, g_requests.Request(), settings.GOOGLE_CLIENT_ID
-                )
-            except ImportError:
-                pass
-            except ValueError as exc:
-                raise AuthenticationError(f"Google sign-in failed: {exc}") from exc
+        A Google ID token proves who the user is *to a particular app*. Anyone
+        can stand up a Google app and mint a valid token for their own signed-in
+        users, so the signature alone means nothing — it is the `aud` claim,
+        matched against our own client id, that makes it proof for *us*.
+
+        Without GOOGLE_CLIENT_ID there is nothing to match against, and this
+        used to fall through to tokeninfo with the audience check skipped: any
+        valid Google token from any app on the internet would be accepted and
+        would log in — or silently create — the account holding that email.
+        Refusing outright is the only safe behaviour, and a server missing one
+        env var should fail visibly rather than authenticate strangers.
+        """
+        if not settings.GOOGLE_CLIENT_ID:
+            raise AuthenticationError(
+                "Google sign-in is not configured on this server. "
+                "Sign in with your phone number and password instead."
+            )
+
+        try:
+            from google.auth.transport import requests as g_requests  # noqa: PLC0415
+            from google.oauth2 import id_token as g_id_token  # noqa: PLC0415
+
+            return g_id_token.verify_oauth2_token(
+                id_token, g_requests.Request(), settings.GOOGLE_CLIENT_ID
+            )
+        except ImportError:
+            pass  # google-auth absent — verify over the network instead
+        except ValueError as exc:
+            raise AuthenticationError(f"Google sign-in failed: {exc}") from exc
 
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(GOOGLE_TOKENINFO, params={"id_token": id_token})
         if resp.status_code != 200:
             raise AuthenticationError("Google sign-in failed: the token could not be verified.")
         claims = resp.json()
-        if settings.GOOGLE_CLIENT_ID and claims.get("aud") != settings.GOOGLE_CLIENT_ID:
+        if claims.get("aud") != settings.GOOGLE_CLIENT_ID:
             raise AuthenticationError("Google sign-in failed: token was issued for another app.")
         return claims
 
