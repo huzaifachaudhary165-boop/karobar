@@ -12,9 +12,17 @@
 #   qrcode/pillow  imported lazily, only when show_qr_code is on; the invoice
 #                  renders fine without it and Pillow is one of the largest wheels
 #   pytest, ruff   development only
-#   openpyxl, slowapi, tenacity, orjson   not imported anywhere in app/
+#   openpyxl, slowapi, tenacity   not imported anywhere in app/
+#
+# Some entries below are never written as `import x`. They back a framework
+# feature and only fail when a request hits it, which is exactly how orjson got
+# left out of the first cut of this file and 500'd every response:
+#   orjson            ORJSONResponse, the app's default_response_class
+#   python-multipart  File() and Form() parameters
+#   email-validator   pydantic's EmailStr
 
 fastapi==0.115.6
+orjson==3.10.13
 python-multipart==0.0.20
 
 sqlalchemy[asyncio]==2.0.36
