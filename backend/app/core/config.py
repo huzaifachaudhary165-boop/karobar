@@ -140,6 +140,29 @@ class Settings(BaseSettings):
                 pass
         return [o.strip() for o in text.split(",") if o.strip()]
 
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def _clean_database_url(cls, v: object) -> object:
+        """Undo the two ways a connection string gets mistyped into a panel.
+
+        A hosting panel has a key box and a value box. Pasting a whole `.env`
+        line into the value box carries the `DATABASE_URL=` prefix along with
+        it, and a copied line usually brings a trailing newline. Either one
+        makes SQLAlchemy refuse to parse the URL at import, which takes the
+        process down with no working route left to explain why — the failure
+        this guards against cost a live deployment several hours.
+
+        Only this exact prefix is removed. Anything else stays untouched, so a
+        genuinely wrong URL still fails loudly instead of being papered over.
+        """
+        if not isinstance(v, str):
+            return v
+
+        text = v.strip().strip('"').strip("'").strip()
+        if text.upper().startswith("DATABASE_URL="):
+            text = text.split("=", 1)[1].strip()
+        return text
+
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
