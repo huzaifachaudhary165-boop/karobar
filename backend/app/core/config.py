@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import os
 import secrets
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
@@ -36,7 +37,13 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 60
-    CORS_ORIGINS: list[str] = ["*"]
+    # NoDecode is load-bearing. Without it pydantic-settings JSON-decodes any
+    # complex-typed env var *before* validators run, so a perfectly reasonable
+    # `CORS_ORIGINS=https://app.example.com` raises SettingsError at import and
+    # takes the whole process down — which is exactly what happened on the first
+    # production deploy. With it, the raw string reaches `_split_origins` below,
+    # which accepts a bare URL, a comma-separated list, or a JSON array.
+    CORS_ORIGINS: Annotated[list[str], NoDecode] = ["*"]
 
     # ── Database ─────────────────────────────────────────────────
     DATABASE_URL: str = "sqlite+aiosqlite:///./karobar.db"
@@ -113,9 +120,25 @@ class Settings(BaseSettings):
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def _split_origins(cls, v: object) -> object:
-        if isinstance(v, str) and not v.startswith("["):
-            return [o.strip() for o in v.split(",") if o.strip()]
-        return v
+        """Accepts every shape someone reasonably types into a hosting panel.
+
+            https://app.example.com
+            https://app.example.com, https://admin.example.com
+            ["https://app.example.com"]
+            *
+        """
+        if not isinstance(v, str):
+            return v
+
+        text = v.strip()
+        if text.startswith("["):
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                # A malformed array is still better handled as a list of one
+                # than by refusing to start.
+                pass
+        return [o.strip() for o in text.split(",") if o.strip()]
 
     @property
     def is_production(self) -> bool:
