@@ -1,2 +1,40 @@
-# Vercel installs from the repository root. The real list lives in backend/.
--r backend/requirements.txt
+# Runtime dependencies for the deployed API.
+#
+# Deliberately NOT `-r backend/requirements.txt`. That file is the development
+# list — pytest, ruff, alembic, aiosqlite — and on a serverless host every
+# megabyte is paid for again on each cold start. This is only what the running
+# server actually imports.
+#
+# Deliberately absent, and why:
+#   uvicorn        Vercel supplies the ASGI server; only used by `python -m app.main`
+#   alembic        migrations are run from a developer machine, never in a function
+#   aiosqlite      production is Postgres
+#   qrcode/pillow  imported lazily, only when show_qr_code is on; the invoice
+#                  renders fine without it and Pillow is one of the largest wheels
+#   pytest, ruff   development only
+#   openpyxl, slowapi, tenacity, orjson   not imported anywhere in app/
+
+fastapi==0.115.6
+python-multipart==0.0.20
+
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+greenlet==3.1.1
+
+pydantic>=2.11,<3
+pydantic-settings>=2.7,<3
+email-validator>=2.2
+
+passlib[bcrypt]==1.7.4
+bcrypt==4.2.1
+pyjwt==2.10.1
+cryptography==44.0.0
+
+httpx==0.28.1
+google-auth==2.37.0
+
+jinja2>=3.1.5
+
+python-dateutil==2.9.0.post0
+phonenumbers==8.13.52
+structlog==24.4.0
