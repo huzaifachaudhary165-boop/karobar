@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     DB_ECHO: bool = False
     DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 10
+    # Seconds a single connect attempt may take. Deliberately short: a hanging
+    # connect on a serverless host is killed by the platform, which reports only
+    # FUNCTION_INVOCATION_FAILED and hides the cause entirely. Failing fast
+    # produces a real exception instead.
+    DB_CONNECT_TIMEOUT: int = 8
     # Force serverless connection behaviour on a host we do not auto-detect.
     SERVERLESS: bool = False
 

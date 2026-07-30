@@ -26,6 +26,10 @@ def _engine_kwargs() -> dict[str, Any]:
         kw["connect_args"] = {"check_same_thread": False, "timeout": 30}
         return kw
 
+    # How long a single connect attempt may take before it is treated as a
+    # failure. Set here rather than left to the driver's default, which is long
+    # enough that the platform kills the whole invocation first.
+
     if settings.is_serverless:
         # A serverless invocation is frozen between requests, so a pooled
         # connection is held open by a process that is not running — with enough
@@ -42,8 +46,21 @@ def _engine_kwargs() -> dict[str, Any]:
     # pgbouncer in transaction mode hands a different backend to each statement,
     # so a cached prepared statement can be sent to a connection that never saw
     # it. Disabling the cache is the documented fix and costs little.
+    connect_args: dict[str, Any] = {}
     if "pooler.supabase" in settings.DATABASE_URL or "6543" in settings.DATABASE_URL:
-        kw["connect_args"] = {"statement_cache_size": 0, "prepared_statement_cache_size": 0}
+        connect_args["statement_cache_size"] = 0
+        connect_args["prepared_statement_cache_size"] = 0
+
+    # A connect with no timeout can hang indefinitely, and on a serverless host
+    # that does not surface as an error — the platform eventually kills the
+    # invocation and reports only FUNCTION_INVOCATION_FAILED, with no clue which
+    # of the app, the network or the database was at fault. Moving the function
+    # to a region that could not reach the pooler produced exactly that: every
+    # request died after ~25s and said nothing.
+    #
+    # Failing fast turns it into an exception the error handler can describe.
+    connect_args["timeout"] = settings.DB_CONNECT_TIMEOUT
+    kw["connect_args"] = connect_args
 
     return kw
 
