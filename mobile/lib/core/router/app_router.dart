@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../l10n/strings.dart';
 import '../../features/assistant/assistant_screen.dart';
 import '../../features/assistant/scan_screen.dart';
 import '../../features/auth/forgot_password_screen.dart';
@@ -55,6 +56,55 @@ abstract final class Routes {
   static const notifications = 'notifications';
 }
 
+/// Every screen a signed-out person is allowed to be on.
+///
+/// Leaving one out means [resolveRedirect] bounces them back to /login the
+/// instant they arrive — the screen opens and closes and looks like a dead
+/// button.
+const signedOutScreens = {'/login', '/register', '/forgot-password'};
+
+/// Where a request for [path] should actually go, or null to stay put.
+///
+/// Pulled out of the `GoRouter` closure so it can be tested directly. It is
+/// worth testing because a mistake here does not misroute one screen — two
+/// rules that disagree send the user back and forth until go_router gives up
+/// and shows "No screen at ...", from which every button leads back into the
+/// same loop. There is no way out of that except killing the app.
+///
+/// The rule that makes it safe: **every branch that redirects must first return
+/// null for its own destination.** `needsBusiness` broke it by testing
+/// `path != '/register'` and then falling through to a later rule that sent
+/// /register back to /home, so a signed-in user with no business ping-ponged
+/// between the two.
+String? resolveRedirect({
+  required String path,
+  required AuthStatus status,
+  required bool onboarded,
+  required bool needsBusiness,
+}) {
+  // Still restoring from disk — hold on the splash.
+  if (status == AuthStatus.unknown) return path == '/' ? null : '/';
+
+  // First ever launch: the tour comes before the sign-in form.
+  if (!onboarded && status == AuthStatus.signedOut) {
+    return path == '/onboarding' ? null : '/onboarding';
+  }
+  if (onboarded && path == '/onboarding') return '/login';
+
+  if (status == AuthStatus.signedOut) {
+    return signedOutScreens.contains(path) ? null : '/login';
+  }
+
+  // Signed in, but no shop yet: registration finishes the job, and nothing
+  // below may move them off it.
+  if (needsBusiness) return path == '/register' ? null : '/register';
+
+  if (signedOutScreens.contains(path) || path == '/' || path == '/onboarding') {
+    return '/home';
+  }
+  return null;
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
   final session = ref.watch(sessionProvider);
   final onboarded = ref.watch(onboardedProvider);
@@ -62,33 +112,12 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/',
     debugLogDiagnostics: false,
-    redirect: (context, state) {
-      final path = state.matchedLocation;
-      // Every screen a signed-out person is allowed to be on. Leaving one out
-      // means the redirect below bounces them back to /login the instant they
-      // arrive — the screen opens and closes and looks like a dead button.
-      const signedOutScreens = {'/login', '/register', '/forgot-password'};
-      final onAuthScreen = signedOutScreens.contains(path);
-
-      // Still restoring from disk — hold on the splash.
-      if (session.status == AuthStatus.unknown) return path == '/' ? null : '/';
-
-      // First ever launch: the tour comes before the sign-in form.
-      if (!onboarded && session.status == AuthStatus.signedOut) {
-        return path == '/onboarding' ? null : '/onboarding';
-      }
-      if (onboarded && path == '/onboarding') return '/login';
-
-      if (session.status == AuthStatus.signedOut) {
-        return onAuthScreen ? null : '/login';
-      }
-
-      // Signed in but with no business yet: registration finishes the job.
-      if (session.needsBusiness && path != '/register') return '/register';
-
-      if (onAuthScreen || path == '/' || path == '/onboarding') return '/home';
-      return null;
-    },
+    redirect: (context, state) => resolveRedirect(
+      path: state.matchedLocation,
+      status: session.status,
+      onboarded: onboarded,
+      needsBusiness: session.needsBusiness,
+    ),
     routes: [
       GoRoute(
         path: '/',
@@ -217,21 +246,47 @@ final routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
     ],
+    // This screen is almost never a genuine missing route — go_router also
+    // lands here when redirects bounce back and forth past its limit. The old
+    // version offered only "Go home", which walked straight back into whatever
+    // loop caused it: the app became unusable until it was force-closed.
+    //
+    // So there is now a second way out that cannot loop, because signing out
+    // resets the state the redirects are reading.
     errorBuilder: (context, state) => Scaffold(
-      appBar: AppBar(title: const Text('Not found')),
+      appBar: AppBar(title: Text(context.t('Something went wrong'))),
       body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.explore_off_outlined, size: 48),
-            const SizedBox(height: 12),
-            Text('No screen at ${state.matchedLocation}'),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: () => context.goNamed(Routes.home),
-              child: const Text('Go home'),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.explore_off_outlined, size: 48),
+              const SizedBox(height: 14),
+              Text(
+                context.t('This screen could not be opened.'),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                state.matchedLocation,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+              const SizedBox(height: 24),
+              FilledButton(
+                onPressed: () => context.goNamed(Routes.home),
+                child: Text(context.t('Go to home')),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () => ref.read(sessionProvider.notifier).forceSignOut(),
+                child: Text(context.t('Sign out and start again')),
+              ),
+            ],
+          ),
         ),
       ),
     ),

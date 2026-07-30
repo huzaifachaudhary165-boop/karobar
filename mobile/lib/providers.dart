@@ -141,13 +141,41 @@ class SessionNotifier extends StateNotifier<SessionState> {
       return;
     }
 
-    final businesses = _store.businesses.map(Business.fromJson).toList();
+    var businesses = _store.businesses.map(Business.fromJson).toList();
+
+    // An empty cached list is not proof that this person has no shop — it is
+    // equally consistent with the list simply not having been written yet, or
+    // with an upgrade that cleared it. `needsBusiness` is derived from this, and
+    // it sends the user into registration: someone who already owns a shop
+    // would be walked into creating a second one, splitting their data in two.
+    //
+    // So when there is a valid token but no cached shop, ask the server. If the
+    // network is down we fall through with the empty list; registration is then
+    // the honest destination, because there is nothing else we can offer.
+    if (businesses.isEmpty) {
+      try {
+        businesses = await _ref.read(businessRepositoryProvider).mine();
+        if (businesses.isNotEmpty) {
+          await _store.setBusinesses([for (final b in businesses) b.toJson()]);
+        }
+      } catch (_) {
+        // Offline, or the token is dead — the 401 handler deals with the latter.
+      }
+    }
+
     final activeId = _store.businessId;
+    final active = businesses.where((b) => b.id == activeId).firstOrNull ??
+        businesses.firstOrNull;
+
+    // Keep the stored active id honest, so the next launch resolves directly.
+    if (active != null && active.id != activeId) {
+      await _store.setBusinessId(active.id);
+    }
+
     state = SessionState(
       status: AuthStatus.signedIn,
       user: AppUser.fromJson(cachedUser),
-      business: businesses.where((b) => b.id == activeId).firstOrNull ??
-          businesses.firstOrNull,
+      business: active,
       businesses: businesses,
       permissions: _store.permissions,
     );

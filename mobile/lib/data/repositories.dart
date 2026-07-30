@@ -540,6 +540,18 @@ class BusinessRepository {
   Future<Map<String, dynamic>> current() async =>
       Map<String, dynamic>.from(await _api.get('/businesses/current') as Map);
 
+  /// Every shop this user belongs to, straight from the server.
+  ///
+  /// Used to settle the question "does this person actually have a shop?" when
+  /// the cached list on disk is empty. Guessing wrong sends someone who already
+  /// owns a shop into registration to create a second one.
+  Future<List<Business>> mine() async {
+    final data = await _api.get('/businesses', cache: false);
+    return (data as List)
+        .map((e) => Business.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
   Future<Map<String, dynamic>> update(Map<String, dynamic> body) async =>
       Map<String, dynamic>.from(await _api.patch('/businesses/current', body: body) as Map);
 
