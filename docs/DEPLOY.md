@@ -26,6 +26,39 @@ flip. Everything else — billing, stock, reports, sync — fits comfortably.
 `python -m app.cli check` prints these as warnings when it detects a serverless
 host, so you are not relying on remembering this page.
 
+### The function region is the biggest number in this whole document
+
+**Put the function in the same AWS region as the database.** For a Supabase
+project on `aws-1-ap-south-1` that is Vercel's `bom1` (Mumbai).
+
+Measured on the live deployment with the function in `iad1` (Washington DC) and
+the database in Mumbai:
+
+| Request | Time |
+|---|---|
+| A route that touches no database | ~560 ms |
+| One database round trip | ~3.6 s |
+| A list endpoint | ~6.8 s |
+| The dashboard (27 queries) | ~18.6 s |
+| Creating an invoice | ~23 s |
+| An assistant reply | **times out at 60 s** |
+
+That is roughly **3 s to open a connection plus 570 ms per query**, and the
+serverless engine uses `NullPool`, so a connection is opened per request rather
+than reused. In-region both costs fall to single-digit milliseconds — which is
+also what brings the assistant back under the timeout, since its cost is mostly
+database round trips rather than Groq.
+
+Set it in **Settings → Functions → Function Region**, then redeploy.
+
+> **Do not put a `regions` key in `vercel.json` on Hobby** — it fails the build.
+> And do not add a `"//"` key for comments either: `vercel.json` is validated
+> against a strict schema and any unknown top-level property fails the build.
+> Both failures are quiet. Vercel keeps serving the last good deployment, so the
+> site stays healthy while every push silently stops landing — six deployments
+> in a row failed that way before anyone looked at the deployments list. Notes
+> about deployment belong in this file, not in that one.
+
 ### If you want a container instead
 
 `render.com`, `railway.app` and `fly.io` all have free tiers, run the included
