@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -38,6 +40,22 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
   bool _listening = false;
   bool _speechReady = false;
 
+  /// Counts down to sending what was just dictated.
+  ///
+  /// Speaking used to leave the words sitting in the text field, and the person
+  /// then had to find the send button — which defeats the point of talking to
+  /// the app at all, and is the part a shopkeeper who does not read English
+  /// gets stuck on.
+  ///
+  /// Sending the instant the engine says "final" is not right either: it
+  /// decides that after a pause in speech, not after a finished thought, so it
+  /// will happily fire off half a sentence — and half a sentence can post a
+  /// wrong invoice. A visible countdown does both: say nothing and it sends
+  /// itself, touch anything and it waits.
+  Timer? _autoSendTimer;
+  int _autoSendIn = 0;
+  static const _autoSendSeconds = 3;
+
   @override
   void initState() {
     super.initState();
@@ -51,20 +69,59 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
 
   @override
   void dispose() {
+    _autoSendTimer?.cancel();
     _input.dispose();
     _scroll.dispose();
     _speech.cancel();
     super.dispose();
   }
 
+  /// Stops the countdown and leaves the words alone so they can be edited.
+  void _cancelAutoSend() {
+    if (_autoSendTimer == null) return;
+    _autoSendTimer?.cancel();
+    _autoSendTimer = null;
+    if (mounted) setState(() => _autoSendIn = 0);
+  }
+
+  void _startAutoSend() {
+    _autoSendTimer?.cancel();
+    if (_input.text.trim().isEmpty) return;
+
+    setState(() => _autoSendIn = _autoSendSeconds);
+    _autoSendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_autoSendIn <= 1) {
+        timer.cancel();
+        _autoSendTimer = null;
+        setState(() => _autoSendIn = 0);
+        _send(_input.text, isVoice: true);
+        return;
+      }
+      setState(() => _autoSendIn -= 1);
+    });
+  }
+
   Future<void> _initSpeech() async {
     try {
       final available = await _speech.initialize(
         onError: (error) {
-          if (mounted) setState(() => _listening = false);
+          if (!mounted) return;
+          _cancelAutoSend();
+          setState(() => _listening = false);
         },
         onStatus: (status) {
-          if (mounted && status == 'done') setState(() => _listening = false);
+          if (!mounted || status != 'done') return;
+          setState(() => _listening = false);
+          // The engine does not always deliver a final onResult before it stops
+          // — on some devices it just goes quiet. Without this the words would
+          // be left stranded in the field, which is the whole bug.
+          if (_input.text.trim().isNotEmpty && _autoSendTimer == null) {
+            _startAutoSend();
+          }
         },
       );
       if (mounted) setState(() => _speechReady = available);
@@ -80,11 +137,15 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
     }
 
     if (_listening) {
+      // Tapping the mic again means "I am done" — send it rather than making
+      // them reach for a second button.
       await _speech.stop();
       setState(() => _listening = false);
+      if (_input.text.trim().isNotEmpty) _startAutoSend();
       return;
     }
 
+    _cancelAutoSend();
     setState(() => _listening = true);
 
     await _speech.listen(
@@ -95,9 +156,10 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
         listenMode: ListenMode.dictation,
         // Without these the platform stops after roughly three seconds of
         // silence, cutting people off mid-sentence while they think of the
-        // amount.
+        // amount. Four is enough to think without the app feeling dead — it was
+        // six, which on top of the countdown made finishing take too long.
         listenFor: const Duration(minutes: 2),
-        pauseFor: const Duration(seconds: 6),
+        pauseFor: const Duration(seconds: 4),
       ),
       onResult: (result) {
         setState(() {
@@ -106,9 +168,7 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
           _input.selection = TextSelection.collapsed(offset: _input.text.length);
           if (result.finalResult) _listening = false;
         });
-        // Deliberately NOT sent automatically. The engine decides "final" after
-        // a pause, not after a finished thought — auto-sending fires off half a
-        // sentence and, worse, can post a wrong invoice. They press send.
+        if (result.finalResult) _startAutoSend();
       },
     );
   }
@@ -135,6 +195,9 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
     final message = text.trim();
     if (message.isEmpty || _sending) return;
 
+    _autoSendTimer?.cancel();
+    _autoSendTimer = null;
+    _autoSendIn = 0;
     _input.clear();
     setState(() {
       _sending = true;
@@ -292,6 +355,12 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
               ),
             ),
 
+          if (_autoSendIn > 0) _AutoSendBar(
+            seconds: _autoSendIn,
+            total: _autoSendSeconds,
+            onCancel: _cancelAutoSend,
+          ),
+
           Container(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
             decoration: BoxDecoration(
@@ -310,6 +379,10 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
                       maxLines: 4,
                       textInputAction: TextInputAction.send,
                       onSubmitted: _send,
+                      // Touching the words means they want to change them, so
+                      // the countdown must get out of the way immediately.
+                      onChanged: (_) => _cancelAutoSend(),
+                      onTap: _cancelAutoSend,
                       decoration: InputDecoration(
                         hintText: _listening
                             ? 'Listening…'
@@ -360,6 +433,84 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
   }
 }
 
+/// Shown between finishing dictation and the message being sent.
+///
+/// It exists so that "it will send itself" is something the person can see
+/// happening, and stopping it is one obvious tap rather than a guess. The whole
+/// bar is the cancel target — a small × would be the wrong size for a thumb on
+/// a shop counter.
+class _AutoSendBar extends StatelessWidget {
+  const _AutoSendBar({
+    required this.seconds,
+    required this.total,
+    required this.onCancel,
+  });
+
+  final int seconds;
+  final int total;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tint = AppColors.softTint(AppColors.primary, theme.brightness);
+    final onTint = AppColors.onSoftTint(AppColors.primary, theme.brightness);
+
+    return Material(
+      color: tint,
+      child: InkWell(
+        onTap: onCancel,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 22,
+                height: 22,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    TweenAnimationBuilder(
+                      tween: Tween<double>(begin: 1, end: seconds / total),
+                      duration: const Duration(milliseconds: 900),
+                      builder: (_, value, __) => CircularProgressIndicator(
+                        value: value,
+                        strokeWidth: 2.4,
+                        color: onTint,
+                        backgroundColor: onTint.withValues(alpha: 0.22),
+                      ),
+                    ),
+                    Text(
+                      '$seconds',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: onTint,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  context.t('Sending in a moment — tap here to edit first'),
+                  style: TextStyle(
+                    color: onTint,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              Icon(Icons.edit_outlined, size: 18, color: onTint),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _MicButton extends StatelessWidget {
   const _MicButton({
     required this.listening,
@@ -373,29 +524,35 @@ class _MicButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: 46,
-        height: 46,
-        decoration: BoxDecoration(
-          color: listening
-              ? AppColors.danger
-              : Theme.of(context).colorScheme.surfaceContainerHighest,
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: listening ? AppColors.danger : Theme.of(context).colorScheme.outline,
+    return Tooltip(
+      message: context.t(
+        listening ? 'Stop and send' : 'Speak instead of typing',
+      ),
+      child: GestureDetector(
+        onTap: enabled ? onTap : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: listening
+                ? AppColors.danger
+                : Theme.of(context).colorScheme.surfaceContainerHighest,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color:
+                  listening ? AppColors.danger : Theme.of(context).colorScheme.outline,
+            ),
           ),
-        ),
-        child: Icon(
-          listening ? Icons.stop : Icons.mic_none,
-          size: 21,
-          color: listening
-              ? Colors.white
-              : enabled
-                  ? Theme.of(context).colorScheme.onSurface
-                  : Theme.of(context).colorScheme.onSurfaceVariant,
+          child: Icon(
+            listening ? Icons.stop : Icons.mic_none,
+            size: 21,
+            color: listening
+                ? Colors.white
+                : enabled
+                    ? Theme.of(context).colorScheme.onSurface
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       ),
     );
