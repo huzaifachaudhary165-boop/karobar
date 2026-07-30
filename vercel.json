@@ -1,5 +1,18 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "//": [
+    "bom1 is Mumbai, the same AWS region as this project's Supabase database",
+    "(aws-1-ap-south-1). Vercel was defaulting to sin1 (Singapore), so every",
+    "database connection crossed the Bay of Bengal and back.",
+    "",
+    "That matters far more than it sounds because the serverless engine uses",
+    "NullPool: a connection is opened per request rather than reused. Measured",
+    "from sin1 that cost ~3.2s, and a request needing two of them took ~7s while",
+    "the dashboard took ~19s. The function itself was only ~700ms of that.",
+    "",
+    "If the database is ever moved, move this with it."
+  ],
+  "regions": ["bom1"],
   "functions": {
     "api/index.py": {
       "memory": 1024,
