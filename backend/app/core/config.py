@@ -79,6 +79,12 @@ class Settings(BaseSettings):
     AI_MAX_TOKENS: int = 4096
     AI_EFFORT: str = "medium"                 # low | medium | high
     AI_ENABLED: bool = True
+    # How long one assistant turn may spend before it must answer with
+    # something. Retrying a throttled call is only worth it while the reply can
+    # still be delivered — past that the host cuts the request off and the user
+    # gets a dead spinner and a generic error instead of "try again in 12s".
+    # Keep this comfortably under the host's own request ceiling (60s on Vercel).
+    AI_REQUEST_BUDGET_SECONDS: float = 40.0
     # Groq's free tier costs nothing; the meter still counts tokens because the
     # per-minute budget is what actually runs out.
     AI_INPUT_COST_PER_MTOK: float = 0.0

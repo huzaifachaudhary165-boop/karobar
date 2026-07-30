@@ -30,9 +30,15 @@ _HEADERS_BASE = {"User-Agent": "karobar/1.0", "Content-Type": "application/json"
 
 # The free tier is measured in tokens-per-minute, so a burst gets throttled long
 # before the daily request cap matters. One patient retry turns most 429s into a
-# slightly slower reply instead of an error the shopkeeper has to read.
+# slightly slower reply instead of an error the shopkeeper has to read — but only
+# while the reply can still be delivered, which is what AI_REQUEST_BUDGET_SECONDS
+# enforces in `_post`.
 _MAX_RETRIES = 2
 _MAX_RETRY_WAIT = 20.0
+
+# Rough room to leave for the retried call itself before the budget runs out.
+# A throttled call that returns another 429 is fast; a successful one is not.
+_MIN_CALL_ALLOWANCE = 8.0
 
 
 @dataclass(slots=True)
@@ -258,6 +264,8 @@ class AiClient:
     # ── transport ────────────────────────────────────────────────
     async def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         last_error: AIError | None = None
+        started = time.monotonic()
+        budget = settings.AI_REQUEST_BUDGET_SECONDS
 
         for attempt in range(_MAX_RETRIES + 1):
             try:
@@ -282,6 +290,32 @@ class AiClient:
                 raise error
 
             wait = _retry_after(response.headers, attempt)
+
+            # Waiting is only worth it if the answer can still be delivered.
+            #
+            # Two retries at up to 20s each is 40s of sleeping on top of three
+            # real calls, and the host cuts the request off at 60s. So the
+            # patient retry that was meant to turn throttling into "a slightly
+            # slower reply" instead guaranteed the worst outcome available: the
+            # shopkeeper watched a spinner for a minute and then got a generic
+            # failure that did not even say they had been throttled.
+            #
+            # Failing now, with the wait named, is worth more than a reply that
+            # cannot arrive.
+            elapsed = time.monotonic() - started
+            if elapsed + wait + _MIN_CALL_ALLOWANCE > budget:
+                log.warning(
+                    "ai.retry_would_exceed_budget",
+                    elapsed_s=round(elapsed, 1),
+                    wait_s=round(wait, 1),
+                    budget_s=budget,
+                )
+                raise AIError(
+                    "The assistant has hit its per-minute limit. "
+                    f"Please try again in about {max(1, round(wait))} seconds.",
+                    code="ai_rate_limited",
+                ) from error
+
             log.warning(
                 "ai.retrying",
                 status=response.status_code,
