@@ -43,31 +43,42 @@ the database in Mumbai:
 | Creating an invoice | ~23 s |
 | An assistant reply | **times out at 60 s** |
 
-That is roughly **3 s to open a connection plus 570 ms per query**. `/health/db`
-splits it: TCP to Mumbai is 187 ms, but a connect plus one `SELECT` is ~2.9 s —
-the rest is TLS and the Postgres handshake, several round trips deep.
+That was roughly **3 s to open a connection plus 570 ms per query**. `/health/db`
+splits it, which is what made the cause visible: TCP to Mumbai was 187 ms, but a
+connect plus one `SELECT` was ~2.9 s — the rest is TLS and the Postgres
+handshake, several round trips deep, each one crossing an ocean.
 
 Reusing the connection instead of opening one per request (see
-`DB_SERVERLESS_POOL_SIZE`) takes about a second off every call — measured
-1.2–1.4× across every screen, dashboard 18.6 s → 16.5 s. Less than it sounds
-like it should be, because Vercel spreads requests over several instances and
-each new one pays the handshake again.
-
-**The remaining time is per-query round trips, and only co-location removes
-them.** The dashboard's 27 queries cost ~15 s from Washington and milliseconds
-from Mumbai. It is also what brings the assistant back under its timeout, since
-its cost is mostly database round trips rather than Groq.
+`DB_SERVERLESS_POOL_SIZE`) was worth 1.2–1.4× on its own. Co-locating was worth
+5–25×. Keep both, but do not mistake the first for a substitute for the second.
 
 Set it in **Settings → Functions → Function Region**, then redeploy.
 
-> Tried once and it failed: every route returned `FUNCTION_INVOCATION_FAILED`
-> within ~3.5 s, including `/health/live`, which touches no database. The
-> function was not starting at all. Reverting to `iad1` restored it.
+**Done, and measured.** With the function in `bom1` alongside the database:
+
+| Request | iad1 (Washington) | bom1 (Mumbai) | |
+|---|---|---|---|
+| TCP to the pooler | 187 ms | **2 ms** | |
+| Connect + one `SELECT` | 2,813 ms | **63 ms** | 45× |
+| `/health/ready` | 3,556 ms | **653 ms** | 5× |
+| Items list | 6,835 ms | **658 ms** | 10× |
+| Parties list | 7,376 ms | **653 ms** | 11× |
+| Dashboard (27 queries) | 18,568 ms | **745 ms** | 25× |
+| Creating an invoice | 22,742 ms | **822 ms** | 28× |
+| An assistant reply | timed out at 60 s | **1,798 ms** | — |
+
+The dashboard's 27 queries were never the problem; 27 × 570 ms of ocean was.
+
+> The first attempt failed: every route returned `FUNCTION_INVOCATION_FAILED`
+> within ~3.5 s, including `/health/live`, which touches no database — the
+> function was not starting at all, and nothing could say why.
 >
-> Why that was undiagnosable has since been fixed — an exception in the lifespan
-> used to abort startup and take every route down with it, including the
-> liveness probe whose whole job is to answer while other things are broken. A
-> second attempt would leave `/health/db` alive to say what actually broke.
+> Two things fixed that, and both are worth keeping. An exception in the
+> lifespan used to abort startup and take every route down with it, including
+> the liveness probe whose whole job is to answer while other things are broken.
+> And `init_db()` ran on every cold start because `ENVIRONMENT` was unset,
+> inspecting 37 tables across the Atlantic before serving a single request. It
+> no longer runs on a serverless host at all.
 
 ### Set ENVIRONMENT
 
