@@ -42,13 +42,27 @@ async def lifespan(app: FastAPI):
     for warning in settings.sanity_check():
         log.warning("config.warning", detail=warning)
 
-    # Development only. The comment always said Alembic owns the schema in
-    # production, but the condition did not — so every production boot ran
-    # `create_all` against a schema that already existed. On a serverless host
-    # that is a burst of round trips on every cold start, and two concurrent
-    # invocations can race each other doing it.
-    if settings.ENVIRONMENT == "development":
-        await init_db()
+    # Nothing below may take the application down.
+    #
+    # An exception raised in a lifespan aborts startup, and every route then
+    # fails — including the liveness probe, whose entire job is to answer while
+    # other things are broken. On a serverless host the platform reports only
+    # FUNCTION_INVOCATION_FAILED for that, with no body and no clue: moving the
+    # function to another region produced exactly that, and even `/health/live`
+    # went down with it.
+    #
+    # These steps are conveniences. A failure is worth a loud log, not an
+    # outage.
+    try:
+        # Development only. The comment always said Alembic owns the schema in
+        # production, but the condition did not — so every production boot ran
+        # `create_all` against a schema that already existed. On a serverless
+        # host that is a burst of round trips on every cold start, and two
+        # concurrent invocations can race each other doing it.
+        if settings.ENVIRONMENT == "development" and not settings.is_serverless:
+            await init_db()
+    except Exception as exc:  # noqa: BLE001 — startup must survive this
+        log.error("db.init_failed", error=str(exc), error_type=type(exc).__name__)
 
     # Only when files actually land on this machine. Everything outside /tmp is
     # read-only on a serverless host, and creating a directory nobody will write

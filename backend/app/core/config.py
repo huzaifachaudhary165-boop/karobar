@@ -93,7 +93,17 @@ class Settings(BaseSettings):
     # ── OTP / SMS ────────────────────────────────────────────────
     OTP_LENGTH: int = 6
     OTP_TTL_SECONDS: int = 300
-    OTP_DEV_MODE: bool = True
+    # Returns the one-time code in the API response so a developer with no mail
+    # or SMS provider can still sign in.
+    #
+    # Defaults to OFF. It used to default to ON, and ENVIRONMENT defaults to
+    # "development", so a deployment that simply did not set either variable —
+    # which is what the live one did — handed out password-reset codes to
+    # anyone who asked for them. That is account takeover for any address
+    # someone can guess, from an unauthenticated endpoint.
+    #
+    # A convenience that is dangerous when forgotten has to be opt-in.
+    OTP_DEV_MODE: bool = False
     SMS_PROVIDER: str = ""
     TWILIO_ACCOUNT_SID: str = ""
     TWILIO_AUTH_TOKEN: str = ""
@@ -179,6 +189,20 @@ class Settings(BaseSettings):
         return self.ENVIRONMENT == "production"
 
     @property
+    def expose_otp_codes(self) -> bool:
+        """Whether a one-time code may be echoed back in an API response.
+
+        Two conditions, because either one alone has already failed once. The
+        flag can be left at a convenient default by accident, and ENVIRONMENT
+        can be left unset on a host that is very much on the internet — the
+        live deployment did both at the same time.
+
+        A serverless host is by definition reachable by strangers, so it never
+        gets the codes regardless of how the flag is set.
+        """
+        return self.OTP_DEV_MODE and not self.is_serverless and not self.is_production
+
+    @property
     def is_sqlite(self) -> bool:
         return self.DATABASE_URL.startswith("sqlite")
 
@@ -218,6 +242,26 @@ class Settings(BaseSettings):
     def sanity_check(self) -> list[str]:
         """Returns a list of production-readiness warnings (empty == good)."""
         warnings: list[str] = []
+
+        # The checks below are all gated on ENVIRONMENT, so a host that never
+        # set it skips every one of them — while running with development
+        # defaults on the public internet. That is exactly what happened, and
+        # it is why this check has to come first and be unconditional.
+        if self.is_serverless and not self.is_production:
+            warnings.append(
+                f"ENVIRONMENT is '{self.ENVIRONMENT}' on a deployed host. "
+                "Development defaults are in force: interactive docs are "
+                "exposed, and the schema is recreated on every cold start. "
+                "Set ENVIRONMENT=production."
+            )
+
+        if self.OTP_DEV_MODE and self.is_serverless:
+            warnings.append(
+                "OTP_DEV_MODE is on for a deployed host. One-time codes would "
+                "be returned in API responses, which is account takeover for "
+                "any known address. They are suppressed anyway, but turn it off."
+            )
+
         if self.is_production:
             if "change-me" in self.SECRET_KEY or len(self.SECRET_KEY) < 32:
                 warnings.append("SECRET_KEY is weak or default — set a 64-char random value.")

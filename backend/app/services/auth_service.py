@@ -172,7 +172,8 @@ class AuthService:
             ),
             "delivered": delivered,
             "expires_in": settings.OTP_TTL_SECONDS,
-            "debug_code": code if settings.OTP_DEV_MODE else None,
+            # Never on a host strangers can reach — see `expose_otp_codes`.
+            "debug_code": code if settings.expose_otp_codes else None,
         }
 
     async def verify_otp_login(
