@@ -43,13 +43,45 @@ the database in Mumbai:
 | Creating an invoice | ~23 s |
 | An assistant reply | **times out at 60 s** |
 
-That is roughly **3 s to open a connection plus 570 ms per query**, and the
-serverless engine uses `NullPool`, so a connection is opened per request rather
-than reused. In-region both costs fall to single-digit milliseconds — which is
-also what brings the assistant back under the timeout, since its cost is mostly
-database round trips rather than Groq.
+That is roughly **3 s to open a connection plus 570 ms per query**. `/health/db`
+splits it: TCP to Mumbai is 187 ms, but a connect plus one `SELECT` is ~2.9 s —
+the rest is TLS and the Postgres handshake, several round trips deep.
+
+Reusing the connection instead of opening one per request (see
+`DB_SERVERLESS_POOL_SIZE`) takes about a second off every call — measured
+1.2–1.4× across every screen, dashboard 18.6 s → 16.5 s. Less than it sounds
+like it should be, because Vercel spreads requests over several instances and
+each new one pays the handshake again.
+
+**The remaining time is per-query round trips, and only co-location removes
+them.** The dashboard's 27 queries cost ~15 s from Washington and milliseconds
+from Mumbai. It is also what brings the assistant back under its timeout, since
+its cost is mostly database round trips rather than Groq.
 
 Set it in **Settings → Functions → Function Region**, then redeploy.
+
+> Tried once and it failed: every route returned `FUNCTION_INVOCATION_FAILED`
+> within ~3.5 s, including `/health/live`, which touches no database. The
+> function was not starting at all. Reverting to `iad1` restored it.
+>
+> Why that was undiagnosable has since been fixed — an exception in the lifespan
+> used to abort startup and take every route down with it, including the
+> liveness probe whose whole job is to answer while other things are broken. A
+> second attempt would leave `/health/db` alive to say what actually broke.
+
+### Set ENVIRONMENT
+
+`ENVIRONMENT` defaults to `development`. A deployment that never sets it runs
+with development defaults on the public internet: interactive docs exposed, the
+schema recreated on every cold start, and — until this was changed —
+`OTP_DEV_MODE` on, which put password-reset codes in the API response. That is
+account takeover for any address someone can guess, from an endpoint that cannot
+require authentication.
+
+The codes are now withheld on any deployed host regardless of the flag, and
+`sanity_check` warns when `ENVIRONMENT` is unset on one. Set it anyway:
+
+    ENVIRONMENT=production
 
 > **Do not put a `regions` key in `vercel.json` on Hobby** — it fails the build.
 > And do not add a `"//"` key for comments either: `vercel.json` is validated
