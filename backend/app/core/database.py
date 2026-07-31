@@ -32,12 +32,37 @@ def _engine_kwargs() -> dict[str, Any]:
 
     if settings.is_serverless:
         # A serverless invocation is frozen between requests, so a pooled
-        # connection is held open by a process that is not running — with enough
+        # connection is held open by a process that is not running. With enough
         # concurrent invocations that exhausts the database's connection limit
-        # while almost none are doing work. NullPool hands the connection back
-        # immediately and lets the *external* pooler do the pooling.
-        kw["poolclass"] = NullPool
-        kw.pop("pool_pre_ping")  # pointless when every connection is new
+        # while almost none are doing work — which is why this was NullPool, a
+        # fresh connection per request, letting the *external* pooler pool.
+        #
+        # Measured, that costs far more than it looked like it would. Opening
+        # one connection to the Supabase transaction pooler takes ~2.9s from
+        # the function's region, against ~190ms for a query on a connection
+        # that already exists: TCP is only 187ms of it, the rest is TLS and the
+        # Postgres handshake, several round trips deep. Every request paid the
+        # whole thing before doing any work.
+        #
+        # A very small pool keeps that cost once per warm instance instead of
+        # once per request. It is safe here specifically because the target is
+        # pgbouncer in transaction mode: holding one client connection is what
+        # it is built for, and it multiplexes them onto far fewer real
+        # backends. pool_pre_ping costs one round trip and is what makes a
+        # connection that went stale while the instance was frozen reconnect
+        # instead of failing.
+        #
+        # Set DB_SERVERLESS_POOL_SIZE=0 to go back to a connection per request.
+        if settings.DB_SERVERLESS_POOL_SIZE <= 0:
+            kw["poolclass"] = NullPool
+            kw.pop("pool_pre_ping")  # pointless when every connection is new
+        else:
+            kw["pool_size"] = settings.DB_SERVERLESS_POOL_SIZE
+            kw["max_overflow"] = settings.DB_SERVERLESS_MAX_OVERFLOW
+            # Shorter than the pooler's own idle timeout, so a connection is
+            # replaced by us rather than found dead by us.
+            kw["pool_recycle"] = 240
+            kw["pool_timeout"] = settings.DB_CONNECT_TIMEOUT
     else:
         kw["pool_size"] = settings.DB_POOL_SIZE
         kw["max_overflow"] = settings.DB_MAX_OVERFLOW

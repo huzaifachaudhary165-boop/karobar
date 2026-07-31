@@ -55,6 +55,12 @@ class Settings(BaseSettings):
     # FUNCTION_INVOCATION_FAILED and hides the cause entirely. Failing fast
     # produces a real exception instead.
     DB_CONNECT_TIMEOUT: int = 8
+    # Connections a warm serverless instance may keep open to the transaction
+    # pooler. Small on purpose: the win is not concurrency, it is not paying
+    # ~2.9s of TLS and Postgres handshake on every single request. Set to 0 to
+    # go back to a fresh connection per request.
+    DB_SERVERLESS_POOL_SIZE: int = 1
+    DB_SERVERLESS_MAX_OVERFLOW: int = 2
     # Force serverless connection behaviour on a host we do not auto-detect.
     SERVERLESS: bool = False
 
