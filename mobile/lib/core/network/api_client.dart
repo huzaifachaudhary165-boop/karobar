@@ -1,12 +1,29 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show kDebugMode, debugPrint, visibleForTesting;
 
 import '../../data/local/app_database.dart';
 import '../config/env.dart';
 import '../storage/token_store.dart';
 import 'api_exception.dart';
+
+/// What happened when the app tried to renew an expired access token.
+///
+/// Kept as three cases rather than a bool because "the server rejected the
+/// refresh token" and "we could not reach the server" look identical to a
+/// caller that only sees false — and treating the second as the first signs
+/// people out for having bad signal.
+enum RefreshOutcome {
+  /// A new access token is stored and the request can be replayed.
+  renewed,
+
+  /// The server saw the refresh token and refused it. The session is over.
+  rejected,
+
+  /// No verdict: a timeout, no route, or a server error. The tokens are kept.
+  unreachable,
+}
 
 /// The single HTTP entry point.
 ///
@@ -26,11 +43,7 @@ class ApiClient {
     );
 
     _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: _onRequest,
-        onResponse: _onResponse,
-        onError: _onError,
-      ),
+      InterceptorsWrapper(onRequest: _onRequest, onResponse: _onResponse),
     );
 
     if (kDebugMode) {
@@ -38,6 +51,21 @@ class ApiClient {
         LogInterceptor(requestBody: true, responseBody: false, logPrint: _log),
       );
     }
+
+    // Renewal goes out on its own client, deliberately without the interceptors
+    // above — a 401 on the renewal must not trigger another renewal. It is a
+    // field rather than a local so a test can swap its adapter; the branch it
+    // guards is the one that decides whether someone stays signed in.
+    _refreshDio = Dio(
+      BaseOptions(
+        baseUrl: Env.apiBaseUrl,
+        // Without these Dio waits on the OS default, which on a stalled
+        // connection is minutes, with the user watching a spinner throughout.
+        connectTimeout: Env.connectTimeout,
+        receiveTimeout: Env.connectTimeout,
+        validateStatus: (status) => status != null && status < 500,
+      ),
+    );
   }
 
   final TokenStore _store;
@@ -47,6 +75,14 @@ class ApiClient {
   final AppDatabase? _cache;
 
   late final Dio _dio;
+  late final Dio _refreshDio;
+
+  /// Test seam: lets a test drive both clients without a network.
+  @visibleForTesting
+  set adapters(HttpClientAdapter adapter) {
+    _dio.httpClientAdapter = adapter;
+    _refreshDio.httpClientAdapter = adapter;
+  }
 
   /// True when the most recent [get] was answered from disk instead of the
   /// network. The offline banner reads this to say "showing saved data".
@@ -56,7 +92,7 @@ class ApiClient {
   final _sessionExpired = StreamController<void>.broadcast();
   Stream<void> get onSessionExpired => _sessionExpired.stream;
 
-  Completer<bool>? _refreshing;
+  Completer<RefreshOutcome>? _refreshing;
 
   // ── verbs ──────────────────────────────────────────────────────
 
@@ -174,77 +210,133 @@ class ApiClient {
     handler.next(options);
   }
 
-  void _onResponse(Response<dynamic> response, ResponseInterceptorHandler handler) {
+  /// Renewal lives here, not in `onError`, and that placement is load-bearing.
+  ///
+  /// `validateStatus` lets everything under 500 through, so a 401 arrives as an
+  /// ordinary response rather than an exception — this callback is the only
+  /// place the app ever sees it. `handler.reject()` does **not** re-enter the
+  /// same interceptor's `onError`; Dio passes it further down the chain. So the
+  /// renewal code that used to live in `onError` never ran for an expired
+  /// token, not once.
+  ///
+  /// The access token lasts an hour. Every session therefore ended after an
+  /// hour and stayed ended: reopening the app showed "session expired" on every
+  /// screen, and the refresh button only produced another 401. `test/
+  /// dio_reject_probe_test.dart` pins the Dio behaviour this depends on.
+  Future<void> _onResponse(
+    Response<dynamic> response,
+    ResponseInterceptorHandler handler,
+  ) async {
     final status = response.statusCode ?? 0;
-    if (status >= 400) {
-      handler.reject(
-        DioException(
-          requestOptions: response.requestOptions,
-          response: response,
-          type: DioExceptionType.badResponse,
-        ),
-      );
-      return;
-    }
-    handler.next(response);
-  }
-
-  Future<void> _onError(DioException error, ErrorInterceptorHandler handler) async {
-    final isAuthError = error.response?.statusCode == 401;
-    final isRefreshCall = error.requestOptions.path.contains('/auth/refresh');
-    final alreadyRetried = error.requestOptions.extra['retried'] == true;
-
-    if (!isAuthError || isRefreshCall || alreadyRetried) {
-      handler.next(error);
+    if (status < 400) {
+      handler.next(response);
       return;
     }
 
-    final refreshed = await _refreshToken();
-    if (!refreshed) {
-      _sessionExpired.add(null);
-      handler.next(error);
-      return;
+    final options = response.requestOptions;
+    final canRenew = status == 401 &&
+        !options.path.contains('/auth/refresh') &&
+        options.extra['retried'] != true;
+
+    if (canRenew) {
+      switch (await _refreshToken()) {
+        case RefreshOutcome.renewed:
+          try {
+            options.extra['retried'] = true;
+            options.headers['Authorization'] = 'Bearer ${await _store.accessToken}';
+            handler.resolve(await _dio.fetch<dynamic>(options));
+          } on DioException catch (retryError) {
+            handler.reject(retryError);
+          }
+          return;
+
+        case RefreshOutcome.rejected:
+          // The server looked at the refresh token and said no. That is the
+          // only thing that ends a session.
+          _sessionExpired.add(null);
+
+        case RefreshOutcome.unreachable:
+          // No verdict, so the session may well be fine. Surface it as a
+          // connection problem — which is what makes the read path fall back to
+          // the saved copy instead of showing an error screen.
+          handler.reject(
+            DioException(
+              requestOptions: options,
+              type: DioExceptionType.connectionError,
+              message: 'Could not reach the server to renew the session.',
+            ),
+          );
+          return;
+      }
     }
 
-    try {
-      final options = error.requestOptions..extra['retried'] = true;
-      options.headers['Authorization'] = 'Bearer ${await _store.accessToken}';
-      handler.resolve(await _dio.fetch<dynamic>(options));
-    } on DioException catch (retryError) {
-      handler.next(retryError);
-    }
+    handler.reject(
+      DioException(
+        requestOptions: options,
+        response: response,
+        type: DioExceptionType.badResponse,
+      ),
+    );
   }
 
   /// Concurrent 401s share one refresh instead of racing each other.
-  Future<bool> _refreshToken() async {
+  ///
+  /// The distinction between [RefreshOutcome.rejected] and
+  /// [RefreshOutcome.unreachable] is the whole point of this method.
+  ///
+  /// This used to catch everything and wipe the tokens, so *any* failure signed
+  /// the user out for good — a timeout, a cold start, one bar of signal. The
+  /// access token only lasts an hour, so reopening the app the next morning on
+  /// a weak connection was enough: the renewal timed out, the tokens were
+  /// deleted, and every screen said the session had expired. The saved data was
+  /// still on the phone and now unreachable, and the refresh button could not
+  /// help because there was nothing left to refresh with.
+  ///
+  /// A refresh token is good for sixty days. Throwing it away because one
+  /// request did not complete is never the right call.
+  Future<RefreshOutcome> _refreshToken() async {
     if (_refreshing != null) return _refreshing!.future;
 
-    final completer = Completer<bool>();
+    final completer = Completer<RefreshOutcome>();
     _refreshing = completer;
+
+    Future<RefreshOutcome> finish(RefreshOutcome outcome) async {
+      completer.complete(outcome);
+      return outcome;
+    }
 
     try {
       final refresh = await _store.refreshToken;
-      if (refresh == null) {
-        completer.complete(false);
-        return false;
-      }
+      if (refresh == null) return await finish(RefreshOutcome.rejected);
 
-      final response = await Dio(BaseOptions(baseUrl: Env.apiBaseUrl)).post<dynamic>(
+      final response = await _refreshDio.post<dynamic>(
         '/auth/refresh',
         data: {'refresh_token': refresh},
       );
+
+      final status = response.statusCode ?? 0;
+      if (status == 401 || status == 403) {
+        // Genuinely spent or revoked. Now clearing is correct.
+        await _store.clearTokens();
+        return await finish(RefreshOutcome.rejected);
+      }
+      if (status >= 400) {
+        // A 4xx that is not about the token — keep the session.
+        return await finish(RefreshOutcome.unreachable);
+      }
 
       final tokens = (response.data as Map)['tokens'] as Map;
       await _store.saveTokens(
         access: tokens['access_token'] as String,
         refresh: tokens['refresh_token'] as String,
       );
-      completer.complete(true);
-      return true;
+      return await finish(RefreshOutcome.renewed);
+    } on DioException {
+      // Timeout, no route, DNS, a 5xx — the server never gave a verdict.
+      return await finish(RefreshOutcome.unreachable);
     } catch (_) {
-      await _store.clearTokens();
-      completer.complete(false);
-      return false;
+      // A malformed body. Also not evidence the session is over.
+      return await finish(RefreshOutcome.unreachable);
     } finally {
       _refreshing = null;
     }
