@@ -721,8 +721,28 @@ class AiRepository {
     return ChatReply.fromJson(Map<String, dynamic>.from(data as Map));
   }
 
-  Future<List<String>> suggestions({String language = 'en'}) async {
-    final data = await _api.get('/ai/suggestions', query: {'language': language});
+  /// The prompt chips on the assistant screen.
+  ///
+  /// Cached because they barely change and the screen is unusable without them:
+  /// waiting eight seconds on a round trip before offering anything to tap is
+  /// most of the reason the assistant feels slow to open.
+  Future<List<String>> suggestions({
+    String language = 'en',
+    void Function(List<String>)? onCached,
+  }) async {
+    final data = await _api.get(
+      '/ai/suggestions',
+      query: {'language': language},
+      onCached: onCached == null
+          ? null
+          : (raw) {
+              try {
+                onCached(((raw as Map)['suggestions'] as List)
+                    .map((e) => e.toString())
+                    .toList());
+              } catch (_) {}
+            },
+    );
     return ((data as Map)['suggestions'] as List).map((e) => e.toString()).toList();
   }
 

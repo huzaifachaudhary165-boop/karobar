@@ -434,9 +434,12 @@ final insightsProvider = FutureProvider.autoDispose<List<Insight>>((ref) async {
   return ref.watch(aiRepositoryProvider).insights();
 });
 
-final aiSuggestionsProvider = FutureProvider.autoDispose<List<String>>((ref) async {
+final aiSuggestionsProvider = StreamProvider.autoDispose<List<String>>((ref) {
   final language = ref.watch(languageProvider);
-  return ref.watch(aiRepositoryProvider).suggestions(language: language);
+  final repository = ref.watch(aiRepositoryProvider);
+  return _cachedThenFresh<List<String>>(
+    (emit) => repository.suggestions(language: language, onCached: emit),
+  );
 });
 
 final expensesProvider = StreamProvider.autoDispose<Paged<Expense>>((ref) {
