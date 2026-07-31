@@ -1,4 +1,4 @@
-"""Party (customer/supplier) schemas."""
+﻿"""Party (customer/supplier) schemas."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pydantic import EmailStr, Field, field_validator
 
 from app.models.enums import PartyType
 from app.schemas.common import InputModel, MoneyField, ORMModel, SyncFields
-from app.utils.phone import normalise_phone
+from app.utils.phone import clean_phone
 
 
 class PartyBase(InputModel):
@@ -48,7 +48,7 @@ class PartyBase(InputModel):
     @field_validator("phone", "alternate_phone", "whatsapp")
     @classmethod
     def _phone(cls, v):
-        return normalise_phone(v) if v else None
+        return clean_phone(v)
 
     @field_validator("gstin", "ntn", "pan")
     @classmethod
@@ -94,7 +94,7 @@ class PartyUpdate(InputModel):
     @field_validator("phone", "alternate_phone", "whatsapp")
     @classmethod
     def _phone(cls, v):
-        return normalise_phone(v) if v else None
+        return clean_phone(v)
 
 
 class PartyOut(ORMModel):
@@ -148,7 +148,7 @@ class PartyOut(ORMModel):
 
 
 class PartyListItem(ORMModel):
-    """Slim payload for the parties list — keeps the mobile list screen fast."""
+    """Slim payload for the parties list â€” keeps the mobile list screen fast."""
 
     id: str
     name: str

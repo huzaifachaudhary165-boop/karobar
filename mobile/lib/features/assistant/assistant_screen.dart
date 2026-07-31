@@ -132,7 +132,20 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
 
   Future<void> _toggleListening() async {
     if (!_speechReady) {
-      showError(context, 'Voice input is not available on this device.');
+      // One retry first: initialize() runs at startup, before the microphone
+      // permission dialog has been answered, so the first attempt can fail on
+      // a phone where voice works perfectly well.
+      await _initSpeech();
+    }
+    if (!mounted) return;
+    if (!_speechReady) {
+      showError(
+        context,
+        context.t(
+          'Voice input needs microphone permission and Google speech services. '
+          'Check Settings → Apps → Karobar → Permissions.',
+        ),
+      );
       return;
     }
 

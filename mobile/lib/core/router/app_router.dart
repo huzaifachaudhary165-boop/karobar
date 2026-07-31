@@ -293,21 +293,105 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 });
 
-/// Opens the screen a chat action chip points at.
-void openDeepLink(BuildContext context, String? deepLink) {
-  if (deepLink == null || deepLink.isEmpty) return;
-  final segments = deepLink.split('/').where((s) => s.isNotEmpty).toList();
-  if (segments.length < 2) return;
+/// The tabs inside [Routes.home], by the index `?tab=` expects.
+///
+/// Named because `tab: '1'` scattered through the code is unreadable, and one
+/// wrong digit sends someone to the wrong screen with no error to show for it.
+abstract final class HomeTab {
+  static const dashboard = 0;
+  static const parties = 1;
+  static const invoices = 2;
+  static const items = 3;
+}
 
-  final id = segments[1];
+/// Opens a tab **and applies the filter the caller meant**.
+///
+/// Sending someone to a list without setting its filter is the shape of bug
+/// this exists to stop: tapping "To collect" landed on every party rather than
+/// the ones who owe money, and "1 item running low" opened the whole item list
+/// rather than the item to reorder. Both looked like dead buttons, because
+/// nothing visibly happened.
+void openTab(
+  BuildContext context,
+  WidgetRef ref,
+  int tab, {
+  String? partyFilter,
+  String? itemFilter,
+  String? voucherType,
+  String? voucherFilter,
+}) {
+  if (partyFilter != null) {
+    ref.read(partyFilterProvider.notifier).state = partyFilter;
+  }
+  if (itemFilter != null) {
+    ref.read(itemFilterProvider.notifier).state = itemFilter;
+  }
+  if (voucherType != null) {
+    ref.read(voucherTypeProvider.notifier).state = voucherType;
+  }
+  if (voucherFilter != null) {
+    ref.read(voucherFilterProvider.notifier).state = voucherFilter;
+  }
+  context.goNamed(Routes.home, queryParameters: {'tab': '$tab'});
+}
+
+/// Opens the screen an alert, notification or chat chip points at.
+///
+/// Handles both shapes the server sends: `invoices/<id>` for one record, and
+/// `/items` for a list. It used to require two segments and return silently
+/// otherwise — so every low-stock notification, whose route is just `/items`,
+/// was a tap that did nothing at all.
+///
+/// [ref] is optional only so the chat chips, which have no WidgetRef to hand,
+/// can still call this; with it, list routes arrive filtered.
+void openDeepLink(BuildContext context, String? deepLink, {WidgetRef? ref}) {
+  if (deepLink == null || deepLink.isEmpty) return;
+
+  final withoutQuery = deepLink.split('?').first;
+  final segments = withoutQuery.split('/').where((s) => s.isNotEmpty).toList();
+  if (segments.isEmpty) return;
+
+  final id = segments.length > 1 ? segments[1] : null;
+
+  void toTab(int tab, {String? partyFilter, String? itemFilter,
+      String? voucherType, String? voucherFilter}) {
+    if (ref == null) {
+      context.goNamed(Routes.home, queryParameters: {'tab': '$tab'});
+      return;
+    }
+    openTab(context, ref, tab,
+        partyFilter: partyFilter,
+        itemFilter: itemFilter,
+        voucherType: voucherType,
+        voucherFilter: voucherFilter);
+  }
+
   switch (segments.first) {
-    case 'invoices':
+    case 'invoices' when id != null:
       context.goNamed(Routes.invoiceDetail, pathParameters: {'id': id});
-    case 'parties':
+    case 'invoices':
+      toTab(HomeTab.invoices, voucherType: 'sale', voucherFilter: 'all');
+
+    case 'parties' when id != null:
       context.goNamed(Routes.partyDetail, pathParameters: {'id': id});
-    case 'items':
+    case 'parties':
+      toTab(HomeTab.parties, partyFilter: 'all');
+
+    case 'items' when id != null:
       context.goNamed(Routes.itemForm, queryParameters: {'id': id});
+    case 'items':
+      // A low-stock alert means "show me what to reorder", not "show me
+      // everything".
+      toTab(HomeTab.items, itemFilter: 'low_stock');
+
+    case 'quotations':
+      toTab(HomeTab.invoices, voucherType: 'quotation', voucherFilter: 'all');
     case 'payments':
-      context.goNamed(Routes.home, queryParameters: {'tab': '3'});
+      toTab(HomeTab.parties, partyFilter: 'receivable');
+
+    default:
+      // Never a dead tap: an unknown route lands on the dashboard rather than
+      // leaving the person wondering whether they missed the target.
+      toTab(HomeTab.dashboard);
   }
 }

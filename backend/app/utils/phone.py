@@ -40,6 +40,37 @@ def normalise_phone(value: str | None, region: str = DEFAULT_REGION) -> str | No
     return f"+{digits}" if len(digits) >= 8 else raw
 
 
+#: The longest phone number the database column can hold, and the longest E.164
+#: number that exists (ITU-T E.164 caps the digits at 15, so "+" plus 15 is the
+#: real world maximum; the column allows a little slack for stored oddities).
+MAX_PHONE_LENGTH = 20
+
+
+def clean_phone(value: str | None) -> str | None:
+    """Normalise for storage, or raise ValueError with something readable.
+
+    Length has to be judged *after* normalising, because normalising can make
+    the value longer: `normalise_phone` prepends a "+". Pydantic's `max_length`
+    runs against the raw input, so twenty typed digits passed the check, became
+    twenty-one characters, and were then refused by the database — surfacing as
+    a 500 "database error" on a screen whose only real problem was a phone
+    number with too many digits in it.
+    """
+    if not value:
+        return None
+
+    cleaned = normalise_phone(value)
+    if cleaned is None:
+        return None
+    if len(cleaned) > MAX_PHONE_LENGTH:
+        digits = sum(c.isdigit() for c in cleaned)
+        raise ValueError(
+            f"That phone number has {digits} digits, which is too many. "
+            "Check for an extra digit or a country code typed twice."
+        )
+    return cleaned
+
+
 def is_phone_like(value: str) -> bool:
     digits = re.sub(r"\D", "", value or "")
     return 7 <= len(digits) <= 15 and not re.search(r"[a-zA-Z@]", value or "")

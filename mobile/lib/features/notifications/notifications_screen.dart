@@ -130,9 +130,12 @@ class _NotificationRow extends ConsumerWidget {
       onTap: () async {
         if (!notification.isRead) {
           await ref.read(notificationRepositoryProvider).markRead(notification.id);
+          // Both. Refreshing only the badge left this row still drawn as
+          // unread, so tapping it looked like it had done nothing.
           ref.invalidate(unreadCountProvider);
+          ref.invalidate(notificationsProvider);
         }
-        if (context.mounted) openDeepLink(context, notification.route);
+        if (context.mounted) openDeepLink(context, notification.route, ref: ref);
       },
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

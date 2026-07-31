@@ -81,7 +81,11 @@ class _Body extends ConsumerWidget {
                   value: Fmt.compactMoney(data.receivable, symbol: symbol),
                   icon: Icons.call_received,
                   accent: AppColors.success,
-                  onTap: () => context.goNamed(Routes.home, queryParameters: {'tab': '1'}),
+                  // Both of these used to open the party list unfiltered, so
+                  // tapping either showed the same everyone-list and looked
+                  // like nothing had happened.
+                  onTap: () => openTab(context, ref, HomeTab.parties,
+                      partyFilter: 'receivable'),
                 ),
               ),
               const SizedBox(width: 10),
@@ -91,7 +95,8 @@ class _Body extends ConsumerWidget {
                   value: Fmt.compactMoney(data.payable, symbol: symbol),
                   icon: Icons.call_made,
                   accent: AppColors.danger,
-                  onTap: () => context.goNamed(Routes.home, queryParameters: {'tab': '1'}),
+                  onTap: () => openTab(context, ref, HomeTab.parties,
+                      partyFilter: 'payable'),
                 ),
               ),
             ],
@@ -116,7 +121,8 @@ class _Body extends ConsumerWidget {
                   value: Fmt.compactMoney(data.stockValue, symbol: symbol),
                   icon: Icons.inventory_2_outlined,
                   accent: AppColors.warning,
-                  onTap: () => context.goNamed(Routes.home, queryParameters: {'tab': '3'}),
+                  onTap: () =>
+                      openTab(context, ref, HomeTab.items, itemFilter: 'all'),
                 ),
               ),
             ],
@@ -211,11 +217,91 @@ class _HeadlineCard extends StatelessWidget {
   final Dashboard data;
   final String symbol;
 
+  /// Explains the profit figure, because on its own it is not explainable.
+  ///
+  /// The number here is **net** profit: what the goods earned, less expenses.
+  /// Labelled only "Profit", a day of ordinary sales with the rent paid shows
+  /// as a loss, and the obvious reading — "I sold everything at my sale price,
+  /// how am I losing money?" — has no answer anywhere on the screen. So the
+  /// card opens this.
+  void _explain(BuildContext context) {
+    final expenses = data.expenses.value;
+    final net = data.profit.value;
+    final gross = net + expenses;
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                sheetContext.t('How this profit is worked out'),
+                style: Theme.of(sheetContext).textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                data.periodLabel,
+                style: Theme.of(sheetContext).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(sheetContext).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+              const SizedBox(height: 18),
+              _ProfitRow(
+                label: sheetContext.t('Earned on goods sold'),
+                hint: sheetContext.t('Sale price less what the stock cost you'),
+                value: gross,
+                symbol: symbol,
+              ),
+              _ProfitRow(
+                label: sheetContext.t('Expenses'),
+                hint: sheetContext.t('Rent, salaries, transport and the rest'),
+                value: -expenses,
+                symbol: symbol,
+              ),
+              const Divider(height: 26),
+              _ProfitRow(
+                label: sheetContext.t('Left over'),
+                value: net,
+                symbol: symbol,
+                emphasised: true,
+              ),
+              const SizedBox(height: 14),
+              Text(
+                net < 0
+                    ? sheetContext.t(
+                        'This period is negative because expenses were larger '
+                        'than what the goods earned. It is not a problem with '
+                        'your selling prices on its own.',
+                      )
+                    : sheetContext.t(
+                        'Expenses are already taken off, so this is what the '
+                        'shop actually kept.',
+                      ),
+                style: Theme.of(sheetContext).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(sheetContext).colorScheme.onSurfaceVariant,
+                      height: 1.5,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final change = data.sales.changePercent;
 
-    return Container(
+    return GestureDetector(
+      onTap: () => _explain(context),
+      child: Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -285,7 +371,14 @@ class _HeadlineCard extends StatelessWidget {
                   ),
                 ),
               const Spacer(),
-              _MiniStat(label: context.tr('profit'), value: data.profit.value, symbol: symbol),
+              // "Net" is the whole point: this figure already has expenses
+              // taken off it, and without the word a normal trading day with
+              // the rent paid reads as "I am selling at a loss".
+              _MiniStat(
+                label: context.t('Net profit'),
+                value: data.profit.value,
+                symbol: symbol,
+              ),
               const SizedBox(width: 16),
               _MiniStat(
                 label: '${data.invoiceCount}',
@@ -294,6 +387,93 @@ class _HeadlineCard extends StatelessWidget {
                 rawLabel: 'bills',
               ),
             ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Icon(Icons.info_outline,
+                  size: 13, color: Colors.white.withValues(alpha: 0.75)),
+              const SizedBox(width: 5),
+              Text(
+                context.t('Tap to see how'),
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.75),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+      ),
+    );
+  }
+}
+
+/// One line of the profit explanation.
+class _ProfitRow extends StatelessWidget {
+  const _ProfitRow({
+    required this.label,
+    required this.value,
+    required this.symbol,
+    this.hint,
+    this.emphasised = false,
+  });
+
+  final String label;
+  final String? hint;
+  final num value;
+  final String symbol;
+  final bool emphasised;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final negative = value < 0;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: emphasised ? FontWeight.w800 : FontWeight.w600,
+                  ),
+                ),
+                if (hint != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    hint!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontSize: 11.5,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            Fmt.money(value, symbol: symbol, decimals: false),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+              fontSize: emphasised ? 16 : 14,
+              color: negative
+                  ? AppColors.onSoftTint(AppColors.danger, theme.brightness)
+                  : (emphasised
+                      ? AppColors.onSoftTint(AppColors.success, theme.brightness)
+                      : null),
+            ),
           ),
         ],
       ),
@@ -377,11 +557,11 @@ class _PeriodPicker extends StatelessWidget {
   }
 }
 
-class _QuickActions extends StatelessWidget {
+class _QuickActions extends ConsumerWidget {
   const _QuickActions();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final strings = context.s;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -415,7 +595,13 @@ class _QuickActions extends StatelessWidget {
             icon: Icons.payments_outlined,
             label: strings.get('receive_payment'),
             color: AppColors.success,
-            onTap: () => context.goNamed(Routes.home, queryParameters: {'tab': '1'}),
+            // Recording a payment starts with "who paid?", and that lives on
+            // the party's own screen. This used to drop the shopkeeper on the
+            // full party list with no indication of why, which read as the
+            // button not working. Filtered to the people who actually owe
+            // money, the next tap is the Receive button.
+            onTap: () => openTab(context, ref, HomeTab.parties,
+                partyFilter: 'receivable'),
           ),
           ActionTile(
             icon: Icons.document_scanner_outlined,
@@ -455,13 +641,13 @@ class _QuickActions extends StatelessWidget {
   }
 }
 
-class _AlertCard extends StatelessWidget {
+class _AlertCard extends ConsumerWidget {
   const _AlertCard({required this.alert});
 
   final Map<String, dynamic> alert;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final severity = alert['severity']?.toString() ?? 'info';
     final (tint, icon) = switch (severity) {
       'warning' => (AppColors.warning, Icons.warning_amber_rounded),
@@ -474,12 +660,29 @@ class _AlertCard extends StatelessWidget {
       child: AppCard(
         borderColor: tint.withValues(alpha: 0.35),
         color: tint.withValues(alpha: 0.06),
+        // Every alert carries a route *and a filter*, and the filter was being
+        // dropped: "1 item running low" opened the full item list rather than
+        // the one item to reorder, so the card read as a dead button. An
+        // unrecognised route did nothing at all, which is worse.
         onTap: () {
-          final route = (alert['action'] as Map?)?['route']?.toString();
-          if (route == '/invoices') {
-            context.goNamed(Routes.home, queryParameters: {'tab': '2'});
-          } else if (route == '/items') {
-            context.goNamed(Routes.home, queryParameters: {'tab': '3'});
+          final action = (alert['action'] as Map?) ?? const {};
+          final route = action['route']?.toString();
+          final filter = action['filter']?.toString();
+
+          switch (route) {
+            case '/invoices':
+              openTab(context, ref, HomeTab.invoices,
+                  voucherType: 'sale', voucherFilter: filter ?? 'all');
+            case '/items':
+              openTab(context, ref, HomeTab.items, itemFilter: filter ?? 'all');
+            case '/quotations':
+              openTab(context, ref, HomeTab.invoices,
+                  voucherType: 'quotation', voucherFilter: 'all');
+            case '/parties':
+              openTab(context, ref, HomeTab.parties, partyFilter: filter ?? 'all');
+            default:
+              // Never nothing. A card that looks tappable must go somewhere.
+              openTab(context, ref, HomeTab.dashboard);
           }
         },
         child: Row(
@@ -693,10 +896,12 @@ class _SetupChecklist extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final progress = ref.watch(setupProgressProvider).maybeWhen(
-          data: (value) => value,
-          orElse: () => null,
-        );
+    // valueOrNull, not maybeWhen(orElse: null). Riverpod keeps the previous
+    // value on an AsyncLoading raised by a refresh, and this card is refreshed
+    // by every write — so treating "loading" as "no data" made it vanish and
+    // reappear on each screen change, which reads as the app glitching rather
+    // than as data arriving.
+    final progress = ref.watch(setupProgressProvider).valueOrNull;
     if (progress == null || progress.isComplete) return const SizedBox.shrink();
 
     final theme = Theme.of(context);

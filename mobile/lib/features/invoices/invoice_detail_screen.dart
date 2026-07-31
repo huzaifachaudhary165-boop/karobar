@@ -27,8 +27,11 @@ class InvoiceDetailScreen extends ConsumerWidget {
       appBar: AppBar(
         title: Text(context.t('Invoice')),
         actions: [
-          async.maybeWhen(
-            data: (voucher) => PopupMenuButton<String>(
+          // valueOrNull, so Print / Share / Cancel do not disappear from the
+          // app bar every time this invoice is refreshed — which happens after
+          // recording a payment, i.e. exactly when someone wants to print.
+          if (async.valueOrNull case final voucher?)
+            PopupMenuButton<String>(
               onSelected: (action) => _onAction(context, ref, voucher, action),
               itemBuilder: (_) => [
                 PopupMenuItem(
@@ -67,21 +70,22 @@ class InvoiceDetailScreen extends ConsumerWidget {
                   ),
               ],
             ),
-            orElse: () => const SizedBox.shrink(),
-          ),
         ],
       ),
-      body: async.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => EmptyState(
-          title: 'Could not load this invoice',
-          message: error.toString(),
-          isError: true,
-          actionLabel: 'Retry',
-          onAction: () => ref.invalidate(voucherProvider(voucherId)),
-        ),
-        data: (voucher) => _Body(voucher: voucher, symbol: symbol),
-      ),
+      // The saved copy, if there is one, beats a spinner over an invoice the
+      // shopkeeper was already reading — recording a payment refreshes this
+      // screen, and blanking it each time is what makes an app feel unsteady.
+      body: switch (async) {
+        AsyncValue(:final value?) => _Body(voucher: value, symbol: symbol),
+        AsyncValue(:final error?) => EmptyState(
+            title: context.t('Could not load this invoice'),
+            message: error.toString(),
+            isError: true,
+            actionLabel: context.t('Retry'),
+            onAction: () => ref.invalidate(voucherProvider(voucherId)),
+          ),
+        _ => const Center(child: CircularProgressIndicator()),
+      },
     );
   }
 

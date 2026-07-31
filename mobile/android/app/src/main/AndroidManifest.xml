@@ -78,6 +78,18 @@
     </application>
 
     <queries>
+        <!-- Speech recognition. RECORD_AUDIO alone is not enough: from Android
+             11 an app cannot see another app's services unless it declares
+             them here, so SpeechToText.initialize() simply returned false and
+             the microphone button sat disabled with "voice input is not
+             available on this device". Nothing in the logs said why. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
+        </intent>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH"/>
+        </intent>
+
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

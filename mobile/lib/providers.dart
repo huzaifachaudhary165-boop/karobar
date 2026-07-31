@@ -348,6 +348,21 @@ final dashboardProvider = StreamProvider.autoDispose<Dashboard>((ref) {
 final partySearchProvider = StateProvider.autoDispose<String>((ref) => '');
 final partyFilterProvider = StateProvider.autoDispose<String>((ref) => 'all');
 
+/// The party-list chip values the server will accept as a `party_type`.
+///
+/// The chip row mixes two different things — All, Customer, Supplier, To
+/// collect, To pay — and only the middle two are party types. The others
+/// describe a balance. Sending "receivable" as a party type made the server
+/// reject the whole request, so tapping either balance chip emptied the screen
+/// with "Some fields are invalid" rather than filtering it.
+const partyTypeFilters = {'customer', 'supplier', 'both'};
+
+/// The `party_type` to send for a chip, or null when the chip means something
+/// else. Public so it can be tested; the values must match
+/// `party_type`'s pattern in `backend/app/api/v1/endpoints/parties.py`.
+String? partyTypeForFilter(String filter) =>
+    partyTypeFilters.contains(filter) ? filter : null;
+
 final partiesProvider = StreamProvider.autoDispose<Paged<Party>>((ref) {
   final search = ref.watch(partySearchProvider);
   final filter = ref.watch(partyFilterProvider);
@@ -355,7 +370,7 @@ final partiesProvider = StreamProvider.autoDispose<Paged<Party>>((ref) {
   return _cachedThenFresh<Paged<Party>>((emit) => repository.list(
         onCached: emit,
         search: search.isEmpty ? null : search,
-        partyType: filter == 'all' ? null : filter,
+        partyType: partyTypeForFilter(filter),
         onlyReceivable: filter == 'receivable',
         onlyPayable: filter == 'payable',
         size: 50,

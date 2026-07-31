@@ -1,4 +1,4 @@
-"""Business, membership and settings schemas."""
+﻿"""Business, membership and settings schemas."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pydantic import EmailStr, Field, field_validator
 
 from app.models.enums import BusinessType, TaxType
 from app.schemas.common import InputModel, MoneyField, ORMModel
-from app.utils.phone import normalise_phone
+from app.utils.phone import clean_phone
 
 
 class BusinessCreate(InputModel):
@@ -49,7 +49,7 @@ class BusinessCreate(InputModel):
     @field_validator("phone")
     @classmethod
     def _phone(cls, v):
-        return normalise_phone(v) if v else None
+        return clean_phone(v)
 
     @field_validator("gstin", "ntn", "strn", "pan")
     @classmethod
@@ -86,6 +86,21 @@ class BusinessUpdate(InputModel):
     logo_url: str | None = None
     signature_url: str | None = None
     theme_color: str | None = None
+
+    # This class had no validators at all, so the shop's own phone number was
+    # never normalised — stored exactly as typed, unlike every party's — and
+    # never length-checked, which is the same 500 waiting to happen. Editing
+    # shop details is not a rarer path than adding a customer; it is just a
+    # quieter one.
+    @field_validator("phone", "alternate_phone")
+    @classmethod
+    def _phone(cls, v):
+        return clean_phone(v)
+
+    @field_validator("gstin", "ntn", "strn", "pan")
+    @classmethod
+    def _upper(cls, v):
+        return v.strip().upper() if v else None
 
 
 class BusinessOut(ORMModel):
@@ -219,7 +234,7 @@ class MemberInvite(InputModel):
     @field_validator("phone")
     @classmethod
     def _phone(cls, v):
-        return normalise_phone(v) if v else None
+        return clean_phone(v)
 
 
 class MemberUpdate(InputModel):

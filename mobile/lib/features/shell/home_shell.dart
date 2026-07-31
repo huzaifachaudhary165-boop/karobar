@@ -155,10 +155,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 class _NotificationBell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final count = ref.watch(unreadCountProvider).maybeWhen(
-          data: (value) => value,
-          orElse: () => 0,
-        );
+    // valueOrNull keeps the last count while a refresh is in flight. Treating
+    // "loading" as zero made the badge blink off and back on after every write.
+    final count = ref.watch(unreadCountProvider).valueOrNull ?? 0;
 
     return Stack(
       alignment: Alignment.center,

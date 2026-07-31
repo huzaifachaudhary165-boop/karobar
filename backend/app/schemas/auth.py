@@ -1,4 +1,4 @@
-"""Auth request/response schemas."""
+﻿"""Auth request/response schemas."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pydantic import EmailStr, Field, field_validator, model_validator
 
 from app.core.security import password_strength_issues
 from app.schemas.common import InputModel, ORMModel
-from app.utils.phone import normalise_phone
+from app.utils.phone import clean_phone
 
 
 class DeviceInfo(InputModel):
@@ -35,7 +35,7 @@ class RegisterRequest(InputModel):
     @field_validator("phone")
     @classmethod
     def _phone(cls, v: str | None) -> str | None:
-        return normalise_phone(v) if v else None
+        return clean_phone(v)
 
     @field_validator("password")
     @classmethod
@@ -75,7 +75,7 @@ class GoogleAuthRequest(InputModel):
     id_token: str = Field(min_length=20)
     device: DeviceInfo | None = None
     # Only used the first time this Google account signs in. Without a business
-    # the app has nothing to scope data to, so one is always created — this just
+    # the app has nothing to scope data to, so one is always created â€” this just
     # lets the user name their own shop instead of getting a generated name.
     business_name: str | None = Field(None, min_length=2, max_length=200)
     business_type: str | None = None
@@ -154,7 +154,7 @@ class AuthResponse(ORMModel):
 class OtpSentResponse(ORMModel):
     message: str
     expires_in: int
-    # False when the mail or SMS send failed. The code is still valid — the
+    # False when the mail or SMS send failed. The code is still valid â€” the
     # client uses this to say "we could not send it" instead of pointing the
     # user at an inbox that will stay empty.
     delivered: bool = True

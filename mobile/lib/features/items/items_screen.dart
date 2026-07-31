@@ -107,8 +107,10 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
       ),
       body: Column(
         children: [
-          summary.maybeWhen(
-            data: (data) => Padding(
+          // valueOrNull so these two tiles stay put during a refresh instead of
+          // collapsing and pushing the whole list up, then dropping it back.
+          if (summary.valueOrNull case final data?)
+            Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: Row(
                 children: [
@@ -134,8 +136,6 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
                 ],
               ),
             ),
-            orElse: () => const SizedBox.shrink(),
-          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
             child: TextField(
