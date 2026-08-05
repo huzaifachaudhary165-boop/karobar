@@ -208,13 +208,33 @@ class ApiClient {
   }
 
   Future<void> _onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
-    final token = await _store.accessToken;
-    if (token != null) options.headers['Authorization'] = 'Bearer $token';
+    // Nothing here may stop the request going out.
+    //
+    // An exception thrown inside an interceptor becomes a DioException of type
+    // `unknown` with no response, which the UI can only describe as "something
+    // went wrong" — the least useful sentence available. And the first thing
+    // this does is read the OS keystore, which on Android genuinely throws
+    // after the app's data is cleared or it is reinstalled: the encrypted
+    // preferences survive while the key that opens them does not.
+    //
+    // Failing to attach a token is not a reason to abandon the request. Signing
+    // in does not need one, and anything else gets a 401 it knows how to
+    // handle.
+    try {
+      final token = await _store.accessToken;
+      if (token != null) options.headers['Authorization'] = 'Bearer $token';
+    } catch (error) {
+      debugPrint('could not read the saved token: $error');
+    }
 
-    final businessId = _store.businessId;
-    if (businessId != null) options.headers['X-Business-Id'] = businessId;
+    try {
+      final businessId = _store.businessId;
+      if (businessId != null) options.headers['X-Business-Id'] = businessId;
+      options.headers['X-Device-Id'] = await _store.deviceId();
+    } catch (error) {
+      debugPrint('could not read stored session details: $error');
+    }
 
-    options.headers['X-Device-Id'] = await _store.deviceId();
     options.headers['X-App-Version'] = Env.version;
     handler.next(options);
   }

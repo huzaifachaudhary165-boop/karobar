@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -46,16 +47,40 @@ class TokenStore {
       TokenStore(await SharedPreferences.getInstance());
 
   // ── tokens ─────────────────────────────────────────────────────
+  /// Reads a key from the OS keystore, treating a failure as "not stored".
+  ///
+  /// On Android this genuinely throws after the app's data is cleared or it is
+  /// reinstalled: the encrypted preferences file survives while the keystore
+  /// entry that decrypts it does not. Letting that escape turns every request
+  /// into an unexplained failure — including the sign-in that would have fixed
+  /// the situation.
+  ///
+  /// The unreadable entry is dropped, so the next write starts clean instead of
+  /// hitting the same wall forever.
+  Future<String?> _readSecure(String key) async {
+    try {
+      return await _secure.read(key: key);
+    } catch (error) {
+      debugPrint('keystore read failed for $key: $error');
+      try {
+        await _secure.delete(key: key);
+      } catch (_) {
+        // Nothing further to try; treat it as absent.
+      }
+      return null;
+    }
+  }
+
   Future<String?> get accessToken async {
     if (_accessLoaded) return _accessCache;
-    _accessCache = await _secure.read(key: _kAccess);
+    _accessCache = await _readSecure(_kAccess);
     _accessLoaded = true;
     return _accessCache;
   }
 
   Future<String?> get refreshToken async {
     if (_refreshLoaded) return _refreshCache;
-    _refreshCache = await _secure.read(key: _kRefresh);
+    _refreshCache = await _readSecure(_kRefresh);
     _refreshLoaded = true;
     return _refreshCache;
   }
@@ -63,21 +88,30 @@ class TokenStore {
   Future<void> saveTokens({required String access, required String refresh}) async {
     // Memory first: a refresh that lands mid-flight must not let another
     // request read the old token back out of the cache while the write is
-    // still in progress.
+    // still in progress. It also means a session survives in memory even if the
+    // keystore itself is unusable on this device.
     _accessCache = access;
     _refreshCache = refresh;
     _accessLoaded = _refreshLoaded = true;
 
-    await _secure.write(key: _kAccess, value: access);
-    await _secure.write(key: _kRefresh, value: refresh);
+    try {
+      await _secure.write(key: _kAccess, value: access);
+      await _secure.write(key: _kRefresh, value: refresh);
+    } catch (error) {
+      debugPrint('keystore write failed: $error');
+    }
   }
 
   Future<void> clearTokens() async {
     _accessCache = _refreshCache = null;
     _accessLoaded = _refreshLoaded = true;
 
-    await _secure.delete(key: _kAccess);
-    await _secure.delete(key: _kRefresh);
+    try {
+      await _secure.delete(key: _kAccess);
+      await _secure.delete(key: _kRefresh);
+    } catch (error) {
+      debugPrint('keystore delete failed: $error');
+    }
   }
 
   // ── session ────────────────────────────────────────────────────

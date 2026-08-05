@@ -65,10 +65,26 @@ class ApiException implements Exception {
         ),
       DioExceptionType.cancel => ('Request cancelled.', 'cancelled'),
       DioExceptionType.badCertificate => ('The server certificate is not trusted.', 'bad_cert'),
+      // `unknown` with nothing to show for it is what Dio reports when the
+      // request never left, or when something threw inside the client itself.
+      // Saying only "something went wrong" leaves nobody anything to act on or
+      // report, so the underlying cause is carried through — it is the only
+      // description that exists.
+      DioExceptionType.unknown when response == null => (
+          'The request could not be sent. '
+              '${_cause(error)}Check your connection and try again.',
+          'request_failed',
+        ),
       _ => _fromStatus(response?.statusCode),
     };
 
     return ApiException(message: message, code: code, statusCode: response?.statusCode);
+  }
+
+  static String _cause(DioException error) {
+    final detail = (error.error ?? error.message)?.toString().trim();
+    if (detail == null || detail.isEmpty) return '';
+    return '(${detail.length > 140 ? '${detail.substring(0, 140)}…' : detail}) ';
   }
 
   static (String, String) _fromStatus(int? status) {
