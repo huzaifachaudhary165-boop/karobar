@@ -332,7 +332,15 @@ void openTab(
   if (voucherFilter != null) {
     ref.read(voucherFilterProvider.notifier).state = voucherFilter;
   }
-  context.goNamed(Routes.home, queryParameters: {'tab': '$tab'});
+
+  // The tab is state, not a destination. Routing to /home?tab=N while already
+  // on /home changed the URL and nothing else — go_router reused the shell's
+  // State, so the tab index never moved and every tile looked dead.
+  ref.read(homeTabProvider.notifier).state = tab;
+
+  // Still navigate, for the case where this is called from a pushed screen —
+  // an invoice, a party, settings — which has to be popped to reveal the shell.
+  context.goNamed(Routes.home);
 }
 
 /// Opens the screen an alert, notification or chat chip points at.
@@ -356,6 +364,8 @@ void openDeepLink(BuildContext context, String? deepLink, {WidgetRef? ref}) {
   void toTab(int tab, {String? partyFilter, String? itemFilter,
       String? voucherType, String? voucherFilter}) {
     if (ref == null) {
+      // Without a ref the tab cannot be set, so fall back to the URL. Callers
+      // that have one — every alert and tile — go through openTab instead.
       context.goNamed(Routes.home, queryParameters: {'tab': '$tab'});
       return;
     }

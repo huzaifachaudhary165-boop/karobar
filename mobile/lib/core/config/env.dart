@@ -9,6 +9,17 @@ abstract final class Env {
   static const String appNameUrdu = 'کاروبار';
   static const String version = '1.0.0';
 
+  /// Which build this is, shown in Settings.
+  ///
+  /// Exists because "is the fix in the APK you are running?" turned into
+  /// guesswork more than once — a bug reported as unfixed and a bug fixed in a
+  /// build nobody had installed look exactly alike from here. Passed in at
+  /// build time:
+  ///
+  ///   flutter build apk --dart-define=BUILD_STAMP=$(date +%Y-%m-%d-%H%M)
+  static const String buildStamp =
+      String.fromEnvironment('BUILD_STAMP', defaultValue: 'dev');
+
   static const String _apiOverride = String.fromEnvironment('API_BASE_URL');
 
   /// The emulator loopback differs per platform, which is the usual first-run trap.

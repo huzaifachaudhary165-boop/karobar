@@ -25,8 +25,6 @@ class HomeShell extends ConsumerStatefulWidget {
 }
 
 class _HomeShellState extends ConsumerState<HomeShell> {
-  late int _index = widget.initialTab.clamp(0, 3);
-
   static const _tabs = [
     DashboardScreen(),
     PartiesScreen(),
@@ -35,13 +33,33 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    // Seeds the shared tab from the route, for a deep link arriving at a
+    // particular list.
+    if (widget.initialTab != 0) {
+      Future.microtask(() {
+        if (mounted) {
+          ref.read(homeTabProvider.notifier).state =
+              widget.initialTab.clamp(0, 3);
+        }
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final strings = context.s;
     final session = ref.watch(sessionProvider);
+    // Watched, not held in a `late` field. Read once into local state, moving
+    // between tabs from inside the app did nothing at all: /home to
+    // /home?tab=1 reuses the same State, so the field never changed and every
+    // dashboard tile, alert and assistant link looked like a dead button.
+    final index = ref.watch(homeTabProvider).clamp(0, 3);
 
     return Scaffold(
-      appBar: _index == 0 ? _dashboardAppBar(session) : null,
-      body: IndexedStack(index: _index, children: _tabs),
+      appBar: index == 0 ? _dashboardAppBar(session) : null,
+      body: IndexedStack(index: index, children: _tabs),
       floatingActionButton: FloatingActionButton(
         heroTag: 'assistant',
         onPressed: () => context.goNamed(Routes.assistant),
@@ -118,14 +136,14 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   }
 
   Widget _navItem(int index, IconData icon, IconData activeIcon, String label) {
-    final selected = _index == index;
+    final selected = ref.watch(homeTabProvider) == index;
     final color = selected
         ? AppColors.primary
         : Theme.of(context).colorScheme.onSurfaceVariant;
 
     return Expanded(
       child: InkWell(
-        onTap: () => setState(() => _index = index),
+        onTap: () => ref.read(homeTabProvider.notifier).state = index,
         borderRadius: BorderRadius.circular(12),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

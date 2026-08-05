@@ -348,6 +348,19 @@ final dashboardProvider = StreamProvider.autoDispose<Dashboard>((ref) {
 final partySearchProvider = StateProvider.autoDispose<String>((ref) => '');
 final partyFilterProvider = StateProvider.autoDispose<String>((ref) => 'all');
 
+/// Which tab of the home shell is showing.
+///
+/// The shell used to take this from the route's `?tab=` parameter alone, read
+/// once into a `late` field — so moving between tabs from inside the app did
+/// nothing whatsoever. Every route into a list from the dashboard produced a
+/// ripple and no change: "2 overdue invoices", "To collect", "To pay", the
+/// stock tile, and every assistant link to a list.
+///
+/// Holding it here makes switching a state change rather than a navigation, so
+/// it cannot depend on whether the router decided to rebuild. `?tab=` still
+/// seeds it, which is what makes deep links work.
+final homeTabProvider = StateProvider<int>((ref) => 0);
+
 /// The party-list chip values the server will accept as a `party_type`.
 ///
 /// The chip row mixes two different things — All, Customer, Supplier, To

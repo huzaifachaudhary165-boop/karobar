@@ -234,7 +234,18 @@ class SettingsScreen extends ConsumerWidget {
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
-                  Text(
+                  // The build, so "does the APK you are running contain this
+                  // fix?" is something anyone can answer by looking, instead of
+                  // being inferred from whether a bug still reproduces.
+                  SelectableText(
+                    'Build ${Env.buildStamp}',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  SelectableText(
                     Env.apiBaseUrl,
                     style: theme.textTheme.labelSmall
                         ?.copyWith(color: theme.colorScheme.onSurfaceVariant),

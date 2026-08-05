@@ -38,6 +38,13 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
   String _target = 'purchase';
 
   Future<void> _pick(ImageSource source) async {
+    // Scanning is four separate things — choose a photo, read it on the phone,
+    // keep a copy, turn the text into a bill — and any of them can fail. They
+    // all used to end at one catch that showed a single message, so "the
+    // assistant hit a problem" was equally the answer for a cancelled picker,
+    // an unreadable photo, a rejected upload and a refusal from the model. That
+    // is not something anyone can act on, or report usefully.
+    var step = 'choosing the photo';
     try {
       final picked = await _picker.pickImage(
         source: source,
@@ -56,6 +63,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
       });
 
       // 1. Read the bill on-device. Free, offline, no quota.
+      step = 'reading the photo on this phone';
       final bill = await BillReader.read(picked.path);
       if (!mounted) return;
 
@@ -76,6 +84,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
       //    But it must not be invisible either: this swallowed every failure,
       //    so when uploads were broken outright the bill still scanned and
       //    nobody could tell that no photo was ever being kept.
+      step = 'saving a copy of the photo';
       String? attachmentId;
       String? attachmentProblem;
       try {
@@ -97,6 +106,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
       }
 
       // 3. Turn that text into a draft bill.
+      step = 'turning the text into a bill';
       final job = await repository.scan(bill.text, attachmentId: attachmentId);
       if (!mounted) return;
 
@@ -112,7 +122,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
       if (!mounted) return;
       setState(() {
         _stage = _Stage.idle;
-        _error = error.toString();
+        _error = '${context.t('Failed while')} $step.\n\n$error';
       });
     }
   }
