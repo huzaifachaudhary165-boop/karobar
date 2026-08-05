@@ -148,9 +148,12 @@ class _Body extends ConsumerWidget {
 
         if (data.topItems.isNotEmpty) ...[
           SectionHeader(
-            'Top items',
-            actionLabel: 'All items',
-            onAction: () => context.goNamed(Routes.home, queryParameters: {'tab': '3'}),
+            context.t('Top items'),
+            actionLabel: context.t('All items'),
+            // The last raw `?tab=` in the app. Routing to a tab this way does
+            // nothing when the shell is already on screen, which is the whole
+            // reason these tiles read as dead.
+            onAction: () => openTab(context, ref, HomeTab.items, itemFilter: 'all'),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
