@@ -37,12 +37,30 @@ _SAFE_NAME = re.compile(r"[^A-Za-z0-9._-]+")
 #: `bill.jpg` arrived declared as a binary blob and was refused.
 _UNKNOWN_MIME = {"application/octet-stream", "binary/octet-stream", ""}
 
-#: Extensions a phone produces that `mimetypes` does not know on every platform.
-_EXTRA_TYPES = {
+#: Every extension this app accepts, spelled out.
+#:
+#: `mimetypes` is not usable as the source of truth here: it reads the *host's*
+#: MIME registry, so the answer depends on the machine. Measured — `.webp`
+#: returns None on one developer box, `.csv` comes back as `application/
+#: vnd.ms-excel`, and `.xlsx` was unknown on the deployed runtime, which is why
+#: a spreadsheet was refused by a message that said spreadsheets were fine.
+#:
+#: An upload being accepted or rejected must not depend on which computer the
+#: server happens to be running on. Keep this in step with `ALLOWED_MIME`.
+_TYPE_BY_SUFFIX = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".jfif": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
     ".heic": "image/heic",
     ".heif": "image/heic",
-    ".jfif": "image/jpeg",
-    ".webp": "image/webp",
+    ".pdf": "application/pdf",
+    ".csv": "text/csv",
+    ".txt": "text/plain",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 }
 
 
@@ -58,8 +76,10 @@ def _resolve_mime(content_type: str | None, filename: str) -> str:
         return declared
 
     suffix = Path(filename).suffix.lower()
-    if suffix in _EXTRA_TYPES:
-        return _EXTRA_TYPES[suffix]
+    if suffix in _TYPE_BY_SUFFIX:
+        return _TYPE_BY_SUFFIX[suffix]
+    # Only for things outside the allow-list, where the answer does not decide
+    # acceptance — it just makes the refusal message more specific.
     return mimetypes.guess_type(filename)[0] or "application/octet-stream"
 
 

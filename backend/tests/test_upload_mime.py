@@ -66,6 +66,35 @@ def test_something_genuinely_unknown_stays_unknown():
     assert _resolve_mime(None, "app.apk") != "image/jpeg"
 
 
+@pytest.mark.parametrize("filename", [
+    "a.jpg", "a.jpeg", "a.jfif", "a.png", "a.gif", "a.webp", "a.heic",
+    "a.heif", "a.pdf", "a.csv", "a.txt", "a.xls", "a.xlsx",
+])
+def test_every_accepted_extension_resolves_without_asking_the_host(filename):
+    """`mimetypes` reads the host's MIME registry, so its answers differ per
+    machine: `.webp` returns None on one box, `.csv` comes back as an Excel
+    type, and `.xlsx` was unknown on the deployed runtime — which refused a
+    spreadsheet with a message saying spreadsheets were fine.
+
+    Whether an upload is accepted must not depend on which computer is serving
+    it, so every allowed extension is spelled out rather than looked up.
+    """
+    from app.services.storage_service import ALLOWED_MIME, _TYPE_BY_SUFFIX
+
+    suffix = filename[filename.rindex("."):]
+    assert suffix in _TYPE_BY_SUFFIX, f"{suffix} is not spelled out"
+    assert _TYPE_BY_SUFFIX[suffix] in ALLOWED_MIME
+    assert _resolve_mime(None, filename) in ALLOWED_MIME
+
+
+def test_the_table_and_the_allow_list_agree():
+    """A type in one and not the other is an upload that fails confusingly."""
+    from app.services.storage_service import ALLOWED_MIME, _TYPE_BY_SUFFIX
+
+    unknown = set(_TYPE_BY_SUFFIX.values()) - ALLOWED_MIME
+    assert not unknown, f"resolvable but not allowed: {sorted(unknown)}"
+
+
 # ── the refusal message ──────────────────────────────────────────
 def test_the_refusal_names_the_file_not_the_mime_type():
     """"application/x-msdownload is not supported" is not something a
