@@ -78,6 +78,37 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
     if (widget.partyId != null) _loadParty(widget.partyId!);
   }
 
+  /// Reacts to the route changing under a form that is already open.
+  ///
+  /// go_router reuses this State when the same route is opened with different
+  /// parameters. `voucherType` is read straight off the widget everywhere, so
+  /// the title and the party picker follow it — but the lines already drafted
+  /// do not: a sale's rates default to the *selling* price, and carrying them
+  /// into a purchase would bill the shop at retail. A different document is a
+  /// different document.
+  @override
+  void didUpdateWidget(InvoiceFormScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (widget.voucherType != oldWidget.voucherType) {
+      setState(() {
+        _lines.clear();
+        _party = null;
+        _notes.clear();
+        _paidAmount.clear();
+        _date = DateTime.now();
+      });
+    }
+
+    if (widget.partyId != oldWidget.partyId) {
+      if (widget.partyId != null) {
+        _loadParty(widget.partyId!);
+      } else {
+        setState(() => _party = null);
+      }
+    }
+  }
+
   @override
   void dispose() {
     _notes.dispose();

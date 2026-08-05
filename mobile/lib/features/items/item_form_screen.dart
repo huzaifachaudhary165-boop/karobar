@@ -54,6 +54,41 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
     }
   }
 
+  /// Reloads when the route points at a different item.
+  ///
+  /// `initState` runs once, and go_router reuses this State when the same route
+  /// is opened with new parameters — so opening item B while item A's form was
+  /// still on the stack left A's name and prices on screen while the form
+  /// belonged to B. Saving then wrote A's figures over B.
+  @override
+  void didUpdateWidget(ItemFormScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.itemId != oldWidget.itemId) {
+      if (_isEditing) {
+        _load();
+      } else {
+        // Went from editing to adding: nothing of the old item may be left
+        // behind, or the "new" item is quietly a copy of it.
+        setState(() {
+          for (final field in [
+            _name, _salePrice, _purchasePrice, _openingStock, _lowStock,
+            _barcode,
+          ]) {
+            field.clear();
+          }
+          _taxRate.text = '0';
+          _unit = 'Pcs';
+          _isService = false;
+        });
+      }
+      return;
+    }
+    if (widget.initialBarcode != oldWidget.initialBarcode &&
+        widget.initialBarcode != null) {
+      _barcode.text = widget.initialBarcode!;
+    }
+  }
+
   @override
   void dispose() {
     _name.dispose();

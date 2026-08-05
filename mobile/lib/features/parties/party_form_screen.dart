@@ -39,6 +39,26 @@ class _PartyFormScreenState extends ConsumerState<PartyFormScreen> {
     if (_isEditing) _load();
   }
 
+  /// Follows the route when it changes under a screen that is already open.
+  ///
+  /// Same shape as the bug that made every dashboard tile inert: a `late` field
+  /// is filled once, when the State is created, and go_router reuses that State
+  /// when the same route is opened again with different parameters. Reaching
+  /// this form for a supplier while it was already open for a customer would
+  /// silently keep the customer, and the form would save the wrong kind of
+  /// party without ever looking wrong.
+  @override
+  void didUpdateWidget(PartyFormScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.partyId != oldWidget.partyId) {
+      if (_isEditing) _load();
+      return;
+    }
+    if (widget.initialType != oldWidget.initialType) {
+      setState(() => _type = widget.initialType);
+    }
+  }
+
   @override
   void dispose() {
     _name.dispose();
