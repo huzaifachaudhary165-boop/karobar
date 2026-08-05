@@ -42,3 +42,7 @@ Thumbs.db
 mobile/android/key.properties
 mobile/android/*.jks
 mobile/android/*.keystore
+
+# Files written by the upload tests. The suite creates real files on disk;
+# they are throwaway and must never reach the repository.
+backend/test_storage/
