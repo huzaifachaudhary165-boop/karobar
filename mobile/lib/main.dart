@@ -26,19 +26,85 @@ Future<void> main() async {
   );
 
   // Loaded up front so the session can be restored before the first frame.
-  final store = await TokenStore.create();
-  // Opened lazily inside — this call itself does no disk work.
-  final database = AppDatabase();
+  //
+  // Anything thrown before `runApp` means no Flutter frame is ever drawn, and
+  // the launch icon stays on screen with no error, no way forward, and nothing
+  // to report. An app that cannot start has to say so.
+  try {
+    final store = await TokenStore.create();
+    // Opened lazily inside — this call itself does no disk work.
+    final database = AppDatabase();
 
-  runApp(
-    ProviderScope(
-      overrides: [
-        tokenStoreProvider.overrideWithValue(store),
-        appDatabaseProvider.overrideWithValue(database),
-      ],
-      child: const KarobarApp(),
-    ),
-  );
+    runApp(
+      ProviderScope(
+        overrides: [
+          tokenStoreProvider.overrideWithValue(store),
+          appDatabaseProvider.overrideWithValue(database),
+        ],
+        child: const KarobarApp(),
+      ),
+    );
+  } catch (error, stack) {
+    debugPrint('startup failed: $error\n$stack');
+    runApp(_StartupFailed(error: error));
+  }
+}
+
+/// Shown when the app could not start at all.
+///
+/// Rare, and precisely because it is rare it must not present as a frozen logo:
+/// that is indistinguishable from a slow phone, and leaves nobody anything to
+/// act on or report.
+class _StartupFailed extends StatelessWidget {
+  const _StartupFailed({required this.error});
+
+  final Object error;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      home: Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline, size: 48),
+                const SizedBox(height: 16),
+                const Text(
+                  'Karobar could not start',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Close the app completely and open it again. If it keeps '
+                  'happening, reinstall — your data is on the server, not only '
+                  'on this phone.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+                SelectableText(
+                  '$error',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 11),
+                ),
+                const SizedBox(height: 10),
+                const SelectableText(
+                  'Build ${Env.buildStamp}',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class KarobarApp extends ConsumerWidget {

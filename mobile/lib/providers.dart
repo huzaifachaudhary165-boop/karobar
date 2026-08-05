@@ -132,7 +132,30 @@ class SessionNotifier extends StateNotifier<SessionState> {
   AuthRepository get _auth => _ref.read(authRepositoryProvider);
 
   /// Rehydrate from disk so a returning user never sees a login screen flash.
+  ///
+  /// Wrapped, because **this method not finishing means the app never starts**.
+  /// The router holds on the splash while the status is `unknown`, so anything
+  /// that throws in here — a cached record from an older version that no longer
+  /// parses, a malformed JSON blob, a field that changed type — leaves the app
+  /// on the logo forever, with no error and no way out but reinstalling.
+  ///
+  /// Signed-out is the right fallback: the session could not be read, so it has
+  /// to be entered again. That is a sign-in screen, not a dead app.
   Future<void> _restore() async {
+    try {
+      await _restoreFromStorage();
+    } catch (error, stack) {
+      debugPrint('session restore failed: $error\n$stack');
+    } finally {
+      // Belt and braces: whatever happened above, the app must leave the
+      // splash. `unknown` is the only status the router will not move past.
+      if (state.status == AuthStatus.unknown) {
+        state = const SessionState(status: AuthStatus.signedOut);
+      }
+    }
+  }
+
+  Future<void> _restoreFromStorage() async {
     final token = await _store.accessToken;
     final cachedUser = _store.user;
 
@@ -141,7 +164,14 @@ class SessionNotifier extends StateNotifier<SessionState> {
       return;
     }
 
-    var businesses = _store.businesses.map(Business.fromJson).toList();
+    var businesses = <Business>[];
+    try {
+      businesses = _store.businesses.map(Business.fromJson).toList();
+    } catch (_) {
+      // A cached shop list this build cannot read is worth discarding, not
+      // dying over — the server is asked for a fresh one just below.
+      businesses = [];
+    }
 
     // An empty cached list is not proof that this person has no shop — it is
     // equally consistent with the list simply not having been written yet, or
@@ -154,12 +184,20 @@ class SessionNotifier extends StateNotifier<SessionState> {
     // the honest destination, because there is nothing else we can offer.
     if (businesses.isEmpty) {
       try {
-        businesses = await _ref.read(businessRepositoryProvider).mine();
+        // Bounded, because this runs while the splash is on screen. Dio's own
+        // receive timeout is a minute; a minute of logo is indistinguishable
+        // from a hang, and the app is perfectly usable without this — it only
+        // decides whether the user lands on the dashboard or on registration.
+        businesses = await _ref
+            .read(businessRepositoryProvider)
+            .mine()
+            .timeout(const Duration(seconds: 8));
         if (businesses.isNotEmpty) {
           await _store.setBusinesses([for (final b in businesses) b.toJson()]);
         }
       } catch (_) {
-        // Offline, or the token is dead — the 401 handler deals with the latter.
+        // Offline, slow, or the token is dead — the 401 handler deals with the
+        // last of those. None of them may hold the app on its splash screen.
       }
     }
 
