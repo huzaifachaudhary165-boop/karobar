@@ -9,6 +9,7 @@ import '../../core/utils/formatters.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
 import '../../providers.dart';
+import 'receive_payment_sheet.dart';
 
 /// Money in and money out, in one list. Payments are grouped by day because
 /// that's how a shopkeeper reconciles the drawer at closing time.
@@ -49,22 +50,34 @@ class PaymentsScreen extends ConsumerWidget {
           ),
         ),
       ),
+      // A screen about payments with no way to record one is a report, not a
+      // feature. The empty state said "payments you record show up here" and
+      // offered nothing to record with.
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => showReceivePaymentSheet(context, ref),
+        icon: const Icon(Icons.add),
+        label: Text(context.t('Record payment')),
+      ),
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(paymentsProvider),
         child: async.when(
           loading: () => const ListSkeleton(),
           error: (error, _) => EmptyState(
-            title: 'Could not load payments',
+            title: context.t('Could not load payments'),
             message: error.toString(),
             isError: true,
-            actionLabel: 'Retry',
+            actionLabel: context.t('Retry'),
             onAction: () => ref.invalidate(paymentsProvider),
           ),
           data: (page) => page.isEmpty
-              ? const EmptyState(
-                  title: 'No payments yet',
-                  message: 'Payments you record against bills show up here.',
+              ? EmptyState(
+                  title: context.t('No payments yet'),
+                  message: context.t(
+                      'Record what a customer paid and it settles their oldest '
+                      'bills for you.'),
                   icon: Icons.payments_outlined,
+                  actionLabel: context.t('Record payment'),
+                  onAction: () => showReceivePaymentSheet(context, ref),
                 )
               : _GroupedList(payments: page.items, symbol: symbol),
         ),

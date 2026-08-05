@@ -72,16 +72,29 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
 
       // 2. Keep the photo for the shopkeeper's records — best effort. A failed
       //    upload must not cost them the scan they already have text for.
+      //
+      //    But it must not be invisible either: this swallowed every failure,
+      //    so when uploads were broken outright the bill still scanned and
+      //    nobody could tell that no photo was ever being kept.
       String? attachmentId;
+      String? attachmentProblem;
       try {
         attachmentId = await repository.uploadImage(
           await picked.readAsBytes(),
           picked.name,
         );
-      } catch (_) {
+      } catch (error) {
         attachmentId = null;
+        attachmentProblem = error.toString();
       }
       if (!mounted) return;
+      if (attachmentProblem != null) {
+        showError(
+          context,
+          '${context.t('The bill was read, but the photo could not be saved.')} '
+          '$attachmentProblem',
+        );
+      }
 
       // 3. Turn that text into a draft bill.
       final job = await repository.scan(bill.text, attachmentId: attachmentId);

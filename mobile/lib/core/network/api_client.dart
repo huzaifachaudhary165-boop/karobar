@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kDebugMode, debugPrint, visibleFor
 import '../../data/local/app_database.dart';
 import '../config/env.dart';
 import '../storage/token_store.dart';
+import '../utils/mime.dart';
 import 'api_exception.dart';
 
 /// What happened when the app tried to renew an expired access token.
@@ -183,7 +184,15 @@ class ApiClient {
   }) async {
     final form = FormData.fromMap({
       ...fields,
-      'file': MultipartFile.fromBytes(bytes, filename: filename),
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename: filename,
+        // Without this Dio declares application/octet-stream, and the server
+        // refuses it as an unsupported file type — so every photo picked from
+        // the gallery and every picture taken with the camera failed to upload,
+        // whatever it actually was.
+        contentType: DioMediaType.parse(contentType ?? mimeTypeFor(filename)),
+      ),
     });
     return _send(() => _dio.post<dynamic>(path, data: form));
   }

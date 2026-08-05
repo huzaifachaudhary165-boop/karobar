@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -712,6 +713,58 @@ class _PartyPickerState extends ConsumerState<_PartyPicker> {
     }
   }
 
+  /// Creates a party without leaving the bill.
+  ///
+  /// The only way to add one from here was a button that navigated to the party
+  /// form — which replaces this route, so the half-written bill was gone. A
+  /// customer walking in who is not on file is the most ordinary thing there
+  /// is; it should not cost the shopkeeper the invoice they were typing.
+  ///
+  /// Name only, because that is all that is needed to bill someone. Everything
+  /// else can be filled in later from the party's own screen.
+  Future<void> _quickAdd() async {
+    final controller = TextEditingController(text: _controller.text.trim());
+    final label = widget.isSupplier ? 'supplier' : 'customer';
+
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('${dialogContext.t('New')} ${dialogContext.t(label)}'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: InputDecoration(labelText: dialogContext.t('Name')),
+          onSubmitted: (value) => Navigator.pop(dialogContext, value.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(dialogContext.t('Cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+            child: Text(dialogContext.t('Add')),
+          ),
+        ],
+      ),
+    );
+
+    if (name == null || name.isEmpty || !mounted) return;
+
+    try {
+      final party = await ref.read(partyRepositoryProvider).create({
+        'name': name,
+        'party_type': widget.isSupplier ? 'supplier' : 'customer',
+      });
+      if (!mounted) return;
+      // Straight back to the bill with them already chosen.
+      Navigator.pop(context, party);
+    } catch (error) {
+      if (mounted) showError(context, error);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final symbol = ref.watch(sessionProvider).symbol;
@@ -740,15 +793,7 @@ class _PartyPickerState extends ConsumerState<_PartyPicker> {
                 IconButton(
                   icon: const Icon(Icons.person_add_outlined),
                   tooltip: context.t('Add new'),
-                  onPressed: () {
-                    Navigator.pop(context);
-                    context.goNamed(
-                      Routes.partyForm,
-                      queryParameters: {
-                        'type': widget.isSupplier ? 'supplier' : 'customer',
-                      },
-                    );
-                  },
+                  onPressed: _quickAdd,
                 ),
               ],
             ),
@@ -757,10 +802,19 @@ class _PartyPickerState extends ConsumerState<_PartyPicker> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _results.isEmpty
-                    ? const EmptyState(
-                        title: 'No matches',
-                        message: 'Try a different name, or add a new party.',
+                    ? EmptyState(
+                        title: context.t('No matches'),
+                        message: _controller.text.trim().isEmpty
+                            ? context.t('Add whoever you are billing.')
+                            : '${context.t('Nobody here by that name.')} '
+                                '${context.t('Add them and carry on with the bill.')}',
                         icon: Icons.search_off,
+                        // Telling someone to add a party without giving them a
+                        // way to do it is where this dead-ended.
+                        actionLabel: widget.isSupplier
+                            ? context.t('Add supplier')
+                            : context.t('Add customer'),
+                        onAction: _quickAdd,
                       )
                     : ListView.builder(
                         controller: scrollController,
@@ -828,6 +882,70 @@ class _ItemPickerState extends ConsumerState<_ItemPicker> {
     }
   }
 
+  /// Adds an item without abandoning the bill.
+  ///
+  /// Same dead end as the party picker: the only route out was a button that
+  /// navigated to the item form, replacing this one and losing the invoice
+  /// being written. Selling something not yet on file is routine.
+  ///
+  /// Name and selling price only. Everything else — stock, tax, purchase price
+  /// — can be filled in from the item's own screen afterwards.
+  Future<void> _quickAdd() async {
+    final nameController = TextEditingController(text: _controller.text.trim());
+    final priceController = TextEditingController();
+
+    final created = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(dialogContext.t('New item')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              autofocus: true,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(labelText: dialogContext.t('Item name')),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: priceController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+              ],
+              decoration: InputDecoration(labelText: dialogContext.t('Selling price')),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(dialogContext.t('Cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(dialogContext.t('Add')),
+          ),
+        ],
+      ),
+    );
+
+    final name = nameController.text.trim();
+    if (created != true || name.isEmpty || !mounted) return;
+
+    try {
+      final item = await ref.read(itemRepositoryProvider).create({
+        'name': name,
+        'sale_price': num.tryParse(priceController.text.trim()) ?? 0,
+      });
+      if (!mounted) return;
+      Navigator.pop(context, item);
+    } catch (error) {
+      if (mounted) showError(context, error);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final symbol = ref.watch(sessionProvider).symbol;
@@ -856,10 +974,7 @@ class _ItemPickerState extends ConsumerState<_ItemPicker> {
                 IconButton(
                   icon: const Icon(Icons.add_box_outlined),
                   tooltip: context.t('Add new item'),
-                  onPressed: () {
-                    Navigator.pop(context);
-                    context.goNamed(Routes.itemForm);
-                  },
+                  onPressed: _quickAdd,
                 ),
               ],
             ),
@@ -868,10 +983,15 @@ class _ItemPickerState extends ConsumerState<_ItemPicker> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _results.isEmpty
-                    ? const EmptyState(
-                        title: 'No items found',
-                        message: 'Try a different search, or add the item.',
+                    ? EmptyState(
+                        title: context.t('No items found'),
+                        message: _controller.text.trim().isEmpty
+                            ? context.t('Add what you are selling.')
+                            : '${context.t('Nothing here by that name.')} '
+                                '${context.t('Add it and carry on with the bill.')}',
                         icon: Icons.search_off,
+                        actionLabel: context.t('Add item'),
+                        onAction: _quickAdd,
                       )
                     : ListView.builder(
                         controller: scrollController,

@@ -10,6 +10,7 @@ import '../../core/utils/formatters.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
 import '../../providers.dart';
+import '../payments/receive_payment_sheet.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -595,13 +596,11 @@ class _QuickActions extends ConsumerWidget {
             icon: Icons.payments_outlined,
             label: strings.get('receive_payment'),
             color: AppColors.success,
-            // Recording a payment starts with "who paid?", and that lives on
-            // the party's own screen. This used to drop the shopkeeper on the
-            // full party list with no indication of why, which read as the
-            // button not working. Filtered to the people who actually owe
-            // money, the next tap is the Receive button.
-            onTap: () => openTab(context, ref, HomeTab.parties,
-                partyFilter: 'receivable'),
+            // Records the payment here. Sending the shopkeeper to the party
+            // list — which is what this did, filtered or not — is the app
+            // asking them to go and find the feature themselves, while they
+            // are standing at the counter holding the cash.
+            onTap: () => showReceivePaymentSheet(context, ref),
           ),
           ActionTile(
             icon: Icons.document_scanner_outlined,

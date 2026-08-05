@@ -31,6 +31,47 @@ ALLOWED_MIME = {
 
 _SAFE_NAME = re.compile(r"[^A-Za-z0-9._-]+")
 
+#: What a client sends when it does not know, or did not bother to say. Treating
+#: it as a real answer is what made every upload from the app fail: Dio's
+#: `MultipartFile.fromBytes` defaults to this, so a perfectly ordinary
+#: `bill.jpg` arrived declared as a binary blob and was refused.
+_UNKNOWN_MIME = {"application/octet-stream", "binary/octet-stream", ""}
+
+#: Extensions a phone produces that `mimetypes` does not know on every platform.
+_EXTRA_TYPES = {
+    ".heic": "image/heic",
+    ".heif": "image/heic",
+    ".jfif": "image/jpeg",
+    ".webp": "image/webp",
+}
+
+
+def _resolve_mime(content_type: str | None, filename: str) -> str:
+    """What this file actually is.
+
+    The declared type wins only when it says something. A client that does not
+    know announces `application/octet-stream`, and the filename is then a far
+    better witness than a header that means "no idea".
+    """
+    declared = (content_type or "").split(";")[0].strip().lower()
+    if declared and declared not in _UNKNOWN_MIME:
+        return declared
+
+    suffix = Path(filename).suffix.lower()
+    if suffix in _EXTRA_TYPES:
+        return _EXTRA_TYPES[suffix]
+    return mimetypes.guess_type(filename)[0] or "application/octet-stream"
+
+
+def _describe(filename: str, mime: str) -> str:
+    """A human name for a file type, for an error someone has to read."""
+    suffix = Path(filename).suffix.lower().lstrip(".")
+    if suffix:
+        return f"A .{suffix} file"
+    if mime and mime not in _UNKNOWN_MIME:
+        return f"A {mime} file"
+    return "That file"
+
 
 class StorageService:
     def __init__(self, base_dir: Path | None = None) -> None:
@@ -65,11 +106,16 @@ class StorageService:
         if not raw:
             raise BusinessRuleError("The uploaded file is empty.")
 
-        mime = content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        mime = _resolve_mime(content_type, filename)
         if mime not in ALLOWED_MIME:
             raise BusinessRuleError(
-                "That file type is not supported.",
-                details={"mime_type": mime, "allowed": sorted(ALLOWED_MIME)},
+                # Name the file rather than the MIME type. "application/msword
+                # is not supported" means nothing to a shopkeeper holding a
+                # phone; "Word documents" does.
+                f"{_describe(filename, mime)} cannot be attached. "
+                "Photos, PDFs and spreadsheets can.",
+                details={"mime_type": mime, "file_name": filename,
+                         "allowed": sorted(ALLOWED_MIME)},
             )
 
         safe = _SAFE_NAME.sub("_", Path(filename).name)[:80] or "file"
