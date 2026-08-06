@@ -225,6 +225,142 @@ class BatchOut(ORMModel):
     days_to_expiry: int | None = None
 
 
+class BatchUpdate(InputModel):
+    batch_number: str | None = Field(None, min_length=1, max_length=64)
+    manufacture_date: date | None = None
+    expiry_date: date | None = None
+    purchase_price: MoneyField | None = None
+    sale_price: MoneyField | None = None
+    mrp: MoneyField | None = None
+    godown_id: str | None = None
+
+
+class BatchAllocation(ORMModel):
+    batch_id: str
+    batch_number: str
+    expiry_date: date | None = None
+    qty: Decimal
+    available: Decimal
+
+
+class ExpiringBatch(ORMModel):
+    batch: BatchOut
+    item_id: str
+    item_name: str
+    unit_label: str
+    value: Decimal
+    days_to_expiry: int | None = None
+
+
+# ── locations ──────────────────────────────────────────────────────
+class GodownCreate(InputModel, SyncFields):
+    name: str = Field(min_length=1, max_length=120)
+    address: str | None = None
+    is_default: bool = False
+
+
+class GodownUpdate(InputModel):
+    name: str | None = Field(None, min_length=1, max_length=120)
+    address: str | None = None
+    is_default: bool | None = None
+
+
+class GodownOut(ORMModel):
+    id: str
+    name: str
+    address: str | None = None
+    is_default: bool
+    item_count: int = 0
+    stock_value: Decimal = Decimal("0")
+    created_at: datetime
+
+
+class GodownStockRow(ORMModel):
+    item_id: str
+    item_name: str
+    sku: str | None = None
+    unit_label: str
+    qty: Decimal
+    value: Decimal
+
+
+class ItemGodownRow(ORMModel):
+    godown_id: str
+    godown_name: str
+    is_default: bool
+    qty: Decimal
+
+
+class StockTransfer(InputModel):
+    item_id: str
+    from_godown_id: str
+    to_godown_id: str
+    qty: QtyField = Field(gt=0, description="How much to move — always positive")
+    batch_id: str | None = None
+    note: str | None = Field(None, max_length=300)
+    entry_date: date | None = None
+
+    @model_validator(mode="after")
+    def _different_locations(self):
+        if self.from_godown_id == self.to_godown_id:
+            raise ValueError("Pick two different locations to transfer between.")
+        return self
+
+
+class TransferResult(ORMModel):
+    item_id: str
+    item_name: str
+    qty: Decimal
+    from_godown_id: str
+    from_qty_after: Decimal
+    to_godown_id: str
+    to_qty_after: Decimal
+
+
+# ── serial numbers ─────────────────────────────────────────────────
+class SerialAdd(InputModel):
+    item_id: str
+    serials: list[str] = Field(min_length=1, max_length=500)
+    godown_id: str | None = None
+    batch_id: str | None = None
+    purchase_price: MoneyField | None = None
+    warranty_months: int | None = Field(None, ge=0, le=600)
+    purchase_voucher_id: str | None = None
+    received_on: date | None = None
+
+
+class SerialOut(ORMModel):
+    id: str
+    item_id: str
+    serial_number: str
+    status: str
+    batch_id: str | None = None
+    godown_id: str | None = None
+    purchase_price: Decimal | None = None
+    sale_price: Decimal | None = None
+    warranty_months: int | None = None
+    warranty_until: date | None = None
+    in_warranty: bool = False
+    sold_at: datetime | None = None
+    purchase_voucher_id: str | None = None
+    sale_voucher_id: str | None = None
+    note: str | None = None
+
+
+class SerialAddResult(ORMModel):
+    added: list[SerialOut] = []
+    duplicates: list[str] = []
+    added_count: int = 0
+    available_count: int = 0
+
+
+class SerialLookupOut(ORMModel):
+    serial: SerialOut
+    item_id: str
+    item_name: str
+    sku: str | None = None
+
+
 class StockAdjustment(InputModel):
     item_id: str
     qty: QtyField = Field(description="Signed: positive adds stock, negative removes it")

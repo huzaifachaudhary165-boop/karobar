@@ -7,11 +7,13 @@ from app.models.base import Base, gen_uuid, utcnow
 from app.models.business import Business, BusinessMember, BusinessSettings
 from app.models.enums import (
     BusinessType, DiscountType, ItemType, MessageRole, NotificationChannel, OcrStatus,
-    PartyType, PaymentDirection, PaymentMode, StockMovement, SyncOperation, TaxType,
-    VoucherStatus, VoucherType,
+    PartyType, PaymentDirection, PaymentMode, SerialStatus, StockMovement, SyncOperation,
+    TaxType, VoucherStatus, VoucherType,
 )
 from app.models.expense import Expense, ExpenseCategory, TaxRate
-from app.models.item import Godown, Item, ItemBatch, ItemCategory, StockLedgerEntry, Unit
+from app.models.item import (
+    Godown, GodownStock, Item, ItemBatch, ItemCategory, ItemSerial, StockLedgerEntry, Unit,
+)
 from app.models.party import Party, PartyGroup
 from app.models.payment import Account, Payment, PaymentAllocation
 from app.models.system import (
@@ -29,7 +31,8 @@ __all__ = [
     "User", "UserSession", "OtpChallenge",
     # masters
     "Party", "PartyGroup",
-    "Item", "ItemCategory", "ItemBatch", "Unit", "Godown", "StockLedgerEntry",
+    "Item", "ItemCategory", "ItemBatch", "ItemSerial", "Unit", "Godown", "GodownStock",
+    "StockLedgerEntry",
     "TaxRate", "ExpenseCategory", "Account",
     # transactions
     "Voucher", "VoucherLine", "Payment", "PaymentAllocation", "Expense",
@@ -40,7 +43,7 @@ __all__ = [
     "Notification", "Integration", "MessageLog",
     # enums
     "VoucherType", "VoucherStatus", "PartyType", "PaymentDirection", "PaymentMode",
-    "TaxType", "StockMovement", "ItemType", "DiscountType", "BusinessType",
+    "TaxType", "StockMovement", "ItemType", "SerialStatus", "DiscountType", "BusinessType",
     "MessageRole", "OcrStatus", "NotificationChannel", "SyncOperation",
 ]
 
@@ -54,6 +57,7 @@ SYNCABLE_MODELS: dict[str, type] = {
     "unit": Unit,
     "godown": Godown,
     "item_batch": ItemBatch,
+    "item_serial": ItemSerial,
     "voucher": Voucher,
     "payment": Payment,
     "expense": Expense,

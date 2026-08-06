@@ -103,6 +103,15 @@ class ItemType(StrEnum):
     SERVICE = "service"
 
 
+class SerialStatus(StrEnum):
+    """Where one individually-numbered unit currently is."""
+
+    IN_STOCK = "in_stock"
+    SOLD = "sold"
+    RETURNED = "returned"   # came back from a customer, sellable again
+    DAMAGED = "damaged"
+
+
 class DiscountType(StrEnum):
     PERCENT = "percent"
     AMOUNT = "amount"

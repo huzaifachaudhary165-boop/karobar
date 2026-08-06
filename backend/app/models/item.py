@@ -15,7 +15,7 @@ from app.core.types import GUID, JSONType, Money, Quantity, TZDateTime
 from app.models.base import (
     AuditedMixin, Base, SoftDeleteMixin, SyncMixin, TenantMixin, TimestampMixin, UUIDMixin,
 )
-from app.models.enums import ItemType, StockMovement
+from app.models.enums import ItemType, SerialStatus, StockMovement
 
 
 class Unit(Base, UUIDMixin, TenantMixin, TimestampMixin, SoftDeleteMixin, SyncMixin):
@@ -168,8 +168,82 @@ class ItemBatch(Base, UUIDMixin, TenantMixin, TimestampMixin, SoftDeleteMixin, S
     def is_expired(self) -> bool:
         return bool(self.expiry_date and self.expiry_date < date.today())
 
+    # A property, not a method: schema validation reads attributes off the ORM
+    # object, and a bound method silently serialises as garbage.
+    @property
     def days_to_expiry(self) -> int | None:
         return (self.expiry_date - date.today()).days if self.expiry_date else None
+
+
+class GodownStock(Base, UUIDMixin, TenantMixin, TimestampMixin, SyncMixin):
+    """On-hand quantity of one item at one location.
+
+    `Item.stock_qty` stays the business-wide total; this splits it by godown.
+    Both are maintained by StockService in the same call, so the sum of these
+    rows for an item always equals its total — a movement with no godown named
+    lands on the default one, which is why a shop that never opens a second
+    location still balances.
+    """
+
+    __table_args__ = (
+        UniqueConstraint("business_id", "item_id", "godown_id", name="uq_godown_stock"),
+        Index("ix_godown_stock_godown", "business_id", "godown_id"),
+    )
+
+    item_id: Mapped[str] = mapped_column(
+        GUID(), ForeignKey("items.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    godown_id: Mapped[str] = mapped_column(
+        GUID(), ForeignKey("godowns.id", ondelete="CASCADE"), nullable=False
+    )
+    qty: Mapped[Decimal] = mapped_column(Quantity(), default=Decimal("0"), nullable=False)
+
+
+class ItemSerial(Base, UUIDMixin, TenantMixin, TimestampMixin, SoftDeleteMixin, SyncMixin):
+    """One individually-numbered unit — IMEI, chassis, engine, warranty serial.
+
+    A serial is a physical thing, so it is never quantity: it is in stock or it
+    is not. Selling one that is already sold is a mistake worth refusing, which
+    is the whole reason a shop asks for serial tracking.
+    """
+
+    __table_args__ = (
+        UniqueConstraint("business_id", "serial_number", name="uq_item_serial"),
+        Index("ix_serials_item_status", "business_id", "item_id", "status"),
+    )
+
+    item_id: Mapped[str] = mapped_column(
+        GUID(), ForeignKey("items.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    serial_number: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), default=SerialStatus.IN_STOCK, nullable=False, index=True
+    )
+
+    batch_id: Mapped[str | None] = mapped_column(
+        GUID(), ForeignKey("item_batches.id", ondelete="SET NULL"), nullable=True
+    )
+    godown_id: Mapped[str | None] = mapped_column(
+        GUID(), ForeignKey("godowns.id", ondelete="SET NULL"), nullable=True
+    )
+
+    purchase_voucher_id: Mapped[str | None] = mapped_column(GUID(), nullable=True)
+    sale_voucher_id: Mapped[str | None] = mapped_column(GUID(), nullable=True)
+    purchase_price: Mapped[Decimal | None] = mapped_column(Money(), nullable=True)
+    sale_price: Mapped[Decimal | None] = mapped_column(Money(), nullable=True)
+
+    warranty_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    warranty_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    sold_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
+    note: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
+    @property
+    def is_available(self) -> bool:
+        return self.status in (SerialStatus.IN_STOCK, SerialStatus.RETURNED)
+
+    @property
+    def in_warranty(self) -> bool:
+        return bool(self.warranty_until and self.warranty_until >= date.today())
 
 
 class StockLedgerEntry(Base, UUIDMixin, TenantMixin, TimestampMixin):

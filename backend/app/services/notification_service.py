@@ -244,7 +244,7 @@ class NotificationService(BaseService[Notification]):
 
         specs = []
         for batch, item in rows:
-            days = batch.days_to_expiry() or 0
+            days = batch.days_to_expiry or 0
             specs.append(
                 {
                     "kind": KIND_EXPIRING,
