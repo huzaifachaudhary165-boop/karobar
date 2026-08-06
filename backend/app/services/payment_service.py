@@ -133,7 +133,15 @@ class PaymentService(BaseService[Payment]):
             party.balance = money(party.balance + delta)
             party.bump_revision()
 
-        await self._move_account_balance(payment.account_id, amount if direction == PaymentDirection.IN else -amount)
+        # A cheque is a promise, not money. The account only moves when the bank
+        # settles it, which ChequeService does on clearing — otherwise a bounced
+        # cheque leaves a shop believing it holds money it never received. The
+        # party's balance still moves here, because the debt genuinely is
+        # considered paid the moment the cheque changes hands.
+        if payment.cheque_status not in ("pending", "deposited"):
+            await self._move_account_balance(
+                payment.account_id, amount if direction == PaymentDirection.IN else -amount
+            )
 
         await self.db.flush()
         await self.track("create", payment, label=payment.number)

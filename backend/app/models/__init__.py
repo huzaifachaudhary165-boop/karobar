@@ -11,6 +11,7 @@ from app.models.enums import (
     TaxType, VoucherStatus, VoucherType,
 )
 from app.models.expense import Expense, ExpenseCategory, TaxRate
+from app.models.finance import AccountTransfer, Loan, LoanPayment
 from app.models.item import (
     Godown, GodownStock, Item, ItemBatch, ItemCategory, ItemSerial, StockLedgerEntry, Unit,
 )
@@ -36,6 +37,7 @@ __all__ = [
     "TaxRate", "ExpenseCategory", "Account",
     # transactions
     "Voucher", "VoucherLine", "Payment", "PaymentAllocation", "Expense",
+    "AccountTransfer", "Loan", "LoanPayment",
     # ai
     "AiConversation", "AiMessage", "AiToolCall", "AiUsage", "AiInsight", "OcrJob",
     # system

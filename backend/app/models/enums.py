@@ -103,6 +103,46 @@ class ItemType(StrEnum):
     SERVICE = "service"
 
 
+class AccountType(StrEnum):
+    CASH = "cash"
+    BANK = "bank"
+    WALLET = "wallet"      # easypaisa / jazzcash / paytm
+    CREDIT_CARD = "credit_card"
+
+
+class ChequeStatus(StrEnum):
+    """A cheque is a promise, not money, until the bank says otherwise."""
+
+    PENDING = "pending"      # written or received, not yet presented
+    DEPOSITED = "deposited"  # handed to the bank, still clearing
+    CLEARED = "cleared"      # the money actually moved
+    BOUNCED = "bounced"      # returned unpaid
+    CANCELLED = "cancelled"
+
+
+class LoanType(StrEnum):
+    BANK = "bank"
+    PERSONAL = "personal"     # from a person, often interest-free
+    VEHICLE = "vehicle"
+    GOLD = "gold"
+    BUSINESS = "business"
+    OTHER = "other"
+
+
+class InterestType(StrEnum):
+    """How the interest is worked out — the two answers give very different totals."""
+
+    FLAT = "flat"          # charged on the original amount for the whole term
+    REDUCING = "reducing"  # charged on what is still owed, so it falls each month
+    NONE = "none"          # interest-free, common for family and committee loans
+
+
+class LoanStatus(StrEnum):
+    ACTIVE = "active"
+    CLOSED = "closed"
+    DEFAULTED = "defaulted"
+
+
 class SerialStatus(StrEnum):
     """Where one individually-numbered unit currently is."""
 

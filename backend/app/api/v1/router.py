@@ -3,7 +3,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
-    ai, auth, businesses, data, expenses, files, health, integrations, items,
+    ai, auth, businesses, data, expenses, files, finance, health, integrations, items,
     notifications, parties, payments, reports, sync, vouchers,
 )
 
@@ -17,6 +17,7 @@ api_router.include_router(items.router)
 api_router.include_router(vouchers.router)
 api_router.include_router(payments.router)
 api_router.include_router(expenses.router)
+api_router.include_router(finance.router)
 api_router.include_router(reports.router)
 api_router.include_router(notifications.router)
 api_router.include_router(ai.router)

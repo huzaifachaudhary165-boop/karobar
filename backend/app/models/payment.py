@@ -45,7 +45,10 @@ class Payment(Base, UUIDMixin, TenantMixin, TimestampMixin, SoftDeleteMixin, Syn
     """
 
     __table_args__ = (
-        UniqueConstraint("business_id", "number", name="uq_payment_number"),
+        # Scoped by direction: a receipt book and a payment-voucher book are
+        # separate books, and requiring one number to be unique across both is
+        # a rule no shop actually keeps.
+        UniqueConstraint("business_id", "direction", "number", name="uq_payment_number"),
         UniqueConstraint("business_id", "client_uuid", name="uq_payment_client_uuid"),
         Index("ix_payments_biz_date", "business_id", "payment_date"),
         Index("ix_payments_biz_party", "business_id", "party_id"),

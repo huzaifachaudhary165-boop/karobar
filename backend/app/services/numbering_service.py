@@ -19,7 +19,10 @@ SERIES_PREFIX_FIELD: dict[str, str] = {
     VoucherType.QUOTATION: "quotation_prefix",
     VoucherType.PROFORMA: "quotation_prefix",
     "payment_in": "payment_prefix",
-    "payment_out": "payment_prefix",
+    # `payment_out` is deliberately absent. Money received and money paid are
+    # counted in separate series, so sharing a prefix would give the first
+    # receipt and the first payment the same number — and a shop that takes one
+    # payment and then makes one would be refused on the second.
 }
 
 FALLBACK_PREFIX: dict[str, str] = {
