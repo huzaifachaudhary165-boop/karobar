@@ -13,6 +13,9 @@ import '../../features/invoices/invoice_detail_screen.dart';
 import '../../features/invoices/invoice_form_screen.dart';
 import '../../features/expenses/expense_form_screen.dart';
 import '../../features/expenses/expenses_screen.dart';
+import '../../features/finance/accounts_screen.dart';
+import '../../features/finance/cheques_screen.dart';
+import '../../features/finance/loans_screen.dart';
 import '../../features/items/item_form_screen.dart';
 import '../../features/notifications/notifications_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
@@ -25,6 +28,8 @@ import '../../features/settings/data_screen.dart';
 import '../../features/settings/settings_screen.dart';
 import '../../features/settings/team_screen.dart';
 import '../../features/shell/home_shell.dart';
+import '../../features/stock/expiry_screen.dart';
+import '../../features/stock/godowns_screen.dart';
 import '../../providers.dart';
 
 /// Route names, referenced by every `context.goNamed(...)` call.
@@ -54,6 +59,11 @@ abstract final class Routes {
   static const expenseForm = 'expense-form';
   static const payments = 'payments';
   static const notifications = 'notifications';
+  static const godowns = 'godowns';
+  static const expiry = 'expiry';
+  static const accounts = 'accounts';
+  static const cheques = 'cheques';
+  static const loans = 'loans';
 }
 
 /// Every screen a signed-out person is allowed to be on.
@@ -230,6 +240,31 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: 'payments',
             name: Routes.payments,
             builder: (_, __) => const PaymentsScreen(),
+          ),
+          GoRoute(
+            path: 'stock/locations',
+            name: Routes.godowns,
+            builder: (_, __) => const GodownsScreen(),
+          ),
+          GoRoute(
+            path: 'stock/expiry',
+            name: Routes.expiry,
+            builder: (_, __) => const ExpiryScreen(),
+          ),
+          GoRoute(
+            path: 'accounts',
+            name: Routes.accounts,
+            builder: (_, __) => const AccountsScreen(),
+          ),
+          GoRoute(
+            path: 'cheques',
+            name: Routes.cheques,
+            builder: (_, __) => const ChequesScreen(),
+          ),
+          GoRoute(
+            path: 'loans',
+            name: Routes.loans,
+            builder: (_, __) => const LoansScreen(),
           ),
           GoRoute(
             path: 'notifications',

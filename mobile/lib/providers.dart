@@ -64,6 +64,10 @@ final businessRepositoryProvider =
     Provider((ref) => BusinessRepository(ref.watch(apiClientProvider)));
 final dataRepositoryProvider =
     Provider((ref) => DataRepository(ref.watch(apiClientProvider)));
+final stockRepositoryProvider =
+    Provider((ref) => StockRepository(ref.watch(apiClientProvider)));
+final financeRepositoryProvider =
+    Provider((ref) => FinanceRepository(ref.watch(apiClientProvider)));
 
 // ── offline queue ────────────────────────────────────────────────
 /// Long-lived: it listens to connectivity for the whole session and flushes the
@@ -519,6 +523,85 @@ final expenseCategoriesProvider =
   return _cachedThenFresh<List<ExpenseCategory>>(
     (emit) => repository.categories(onCached: emit),
   );
+});
+
+// ── stock depth: locations, batches, serials ─────────────────────
+final godownsProvider = StreamProvider.autoDispose<List<Godown>>((ref) {
+  final repository = ref.watch(stockRepositoryProvider);
+  return _cachedThenFresh<List<Godown>>((emit) => repository.godowns(onCached: emit));
+});
+
+final godownStockProvider =
+    FutureProvider.autoDispose.family<List<GodownStockRow>, String>((ref, godownId) {
+  return ref.watch(stockRepositoryProvider).stockAt(godownId);
+});
+
+/// Where one item's stock sits. Empty until a shop creates its first location.
+final itemGodownsProvider =
+    FutureProvider.autoDispose.family<List<ItemGodownRow>, String>((ref, itemId) {
+  return ref.watch(stockRepositoryProvider).whereItemIs(itemId);
+});
+
+final itemBatchesProvider =
+    FutureProvider.autoDispose.family<List<ItemBatch>, String>((ref, itemId) {
+  return ref.watch(stockRepositoryProvider).batches(itemId);
+});
+
+/// How far ahead the expiry watch-list looks.
+final expiryWindowProvider = StateProvider.autoDispose<int>((ref) => 30);
+
+final expiringBatchesProvider =
+    FutureProvider.autoDispose<List<ExpiringBatch>>((ref) {
+  final days = ref.watch(expiryWindowProvider);
+  return ref.watch(stockRepositoryProvider).expiring(withinDays: days);
+});
+
+final itemSerialsProvider =
+    FutureProvider.autoDispose.family<List<ItemSerial>, String>((ref, itemId) {
+  return ref.watch(stockRepositoryProvider).serials(itemId);
+});
+
+// ── money: accounts, cheques, loans ──────────────────────────────
+final bankAccountsProvider = FutureProvider.autoDispose<List<BankAccount>>((ref) {
+  return ref.watch(paymentRepositoryProvider).bankAccounts(cache: false);
+});
+
+final transfersProvider = FutureProvider.autoDispose<List<AccountTransfer>>((ref) {
+  return ref.watch(financeRepositoryProvider).transfers();
+});
+
+/// Which cheques the list is showing. Null means every unsettled one.
+final chequeFilterProvider = StateProvider.autoDispose<String?>((ref) => null);
+
+final chequesProvider = FutureProvider.autoDispose<List<Cheque>>((ref) {
+  final status = ref.watch(chequeFilterProvider);
+  return ref.watch(financeRepositoryProvider).cheques(status: status);
+});
+
+final chequeSummaryProvider = FutureProvider.autoDispose<ChequeSummary>((ref) {
+  return ref.watch(financeRepositoryProvider).chequeSummary();
+});
+
+final loansProvider = FutureProvider.autoDispose<List<Loan>>((ref) {
+  return ref.watch(financeRepositoryProvider).loans();
+});
+
+final loanProvider = FutureProvider.autoDispose.family<Loan, String>((ref, id) {
+  return ref.watch(financeRepositoryProvider).loan(id);
+});
+
+final loanSummaryProvider = FutureProvider.autoDispose<LoanSummary>((ref) {
+  return ref.watch(financeRepositoryProvider).loanSummary();
+});
+
+final loanScheduleProvider =
+    FutureProvider.autoDispose.family<List<LoanInstalment>, String>((ref, id) {
+  return ref.watch(financeRepositoryProvider).loanSchedule(id);
+});
+
+final loanPaymentsProvider =
+    FutureProvider.autoDispose.family<List<LoanPayment>, String>((ref, id) {
+  return ref.watch(financeRepositoryProvider).loanPayments(id);
 });
 
 final paymentDirectionProvider = StateProvider.autoDispose<String?>((ref) => null);

@@ -473,7 +473,264 @@ class PaymentRepository {
     final data = await _api.get('/payments/accounts');
     return (data as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
+
+  Future<List<BankAccount>> bankAccounts({bool cache = true}) async {
+    final data = await _api.get('/payments/accounts', cache: cache);
+    return (data as List)
+        .map((e) => BankAccount.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  Future<BankAccount> createAccount(Map<String, dynamic> body) async {
+    final data = await _api.post('/payments/accounts', body: body);
+    return BankAccount.fromJson(Map<String, dynamic>.from(data as Map));
+  }
 }
+
+/// Locations, batches and serial numbers — the depth behind a plain stock figure.
+class StockRepository {
+  StockRepository(this._api);
+
+  final ApiClient _api;
+
+  // ── locations ──────────────────────────────────────────────────
+  Future<List<Godown>> godowns({void Function(List<Godown>)? onCached}) async {
+    final data = await _api.get('/items/godowns', onCached: _list(onCached, Godown.fromJson));
+    return _parseList(data, Godown.fromJson);
+  }
+
+  Future<Godown> createGodown(Map<String, dynamic> body) async {
+    final data = await _api.post('/items/godowns', body: body);
+    return Godown.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<Godown> updateGodown(String id, Map<String, dynamic> body) async {
+    final data = await _api.patch('/items/godowns/$id', body: body);
+    return Godown.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<void> deleteGodown(String id) => _api.delete('/items/godowns/$id');
+
+  Future<List<GodownStockRow>> stockAt(String godownId) async {
+    final data = await _api.get('/items/godowns/$godownId/stock', cache: false);
+    return _parseList(data, GodownStockRow.fromJson);
+  }
+
+  Future<List<ItemGodownRow>> whereItemIs(String itemId) async {
+    final data = await _api.get('/items/$itemId/godowns', cache: false);
+    return _parseList(data, ItemGodownRow.fromJson);
+  }
+
+  Future<Map<String, dynamic>> transfer({
+    required String itemId,
+    required String fromGodownId,
+    required String toGodownId,
+    required num qty,
+    String? batchId,
+    String? note,
+  }) async {
+    final data = await _api.post('/items/stock/transfer', body: {
+      'item_id': itemId,
+      'from_godown_id': fromGodownId,
+      'to_godown_id': toGodownId,
+      'qty': qty,
+      if (batchId != null) 'batch_id': batchId,
+      if (note != null && note.isNotEmpty) 'note': note,
+    });
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  // ── batches ────────────────────────────────────────────────────
+  Future<List<ItemBatch>> batches(String itemId, {bool inStockOnly = false}) async {
+    final data = await _api.get(
+      '/items/$itemId/batches',
+      cache: false,
+      query: {'in_stock_only': inStockOnly},
+    );
+    return _parseList(data, ItemBatch.fromJson);
+  }
+
+  Future<ItemBatch> createBatch(Map<String, dynamic> body) async {
+    final data = await _api.post('/items/batches', body: body);
+    return ItemBatch.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<ItemBatch> updateBatch(String id, Map<String, dynamic> body) async {
+    final data = await _api.patch('/items/batches/$id', body: body);
+    return ItemBatch.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<void> deleteBatch(String id) => _api.delete('/items/batches/$id');
+
+  Future<List<ExpiringBatch>> expiring({int withinDays = 30}) async {
+    final data = await _api.get(
+      '/items/batches/expiring',
+      cache: false,
+      query: {'within_days': withinDays},
+    );
+    return _parseList(data, ExpiringBatch.fromJson);
+  }
+
+  // ── serials ────────────────────────────────────────────────────
+  Future<List<ItemSerial>> serials(String itemId, {String? status}) async {
+    final data = await _api.get(
+      '/items/$itemId/serials',
+      cache: false,
+      query: {'serial_status': status},
+    );
+    return _parseList(data, ItemSerial.fromJson);
+  }
+
+  Future<SerialAddResult> addSerials({
+    required String itemId,
+    required List<String> serials,
+    num? purchasePrice,
+    int? warrantyMonths,
+    String? godownId,
+  }) async {
+    final data = await _api.post('/items/serials', body: {
+      'item_id': itemId,
+      'serials': serials,
+      if (purchasePrice != null) 'purchase_price': purchasePrice,
+      if (warrantyMonths != null) 'warranty_months': warrantyMonths,
+      if (godownId != null) 'godown_id': godownId,
+    });
+    return SerialAddResult.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<Map<String, dynamic>> lookupSerial(String serialNumber) async {
+    final data = await _api.get('/items/serials/lookup/$serialNumber', cache: false);
+    return Map<String, dynamic>.from(data as Map);
+  }
+}
+
+/// Transfers between own accounts, cheques and loans.
+class FinanceRepository {
+  FinanceRepository(this._api);
+
+  final ApiClient _api;
+
+  // ── transfers ──────────────────────────────────────────────────
+  Future<List<AccountTransfer>> transfers({String? accountId}) async {
+    final data = await _api.get(
+      '/finance/transfers',
+      cache: false,
+      query: {'account_id': accountId},
+    );
+    return _parseList(data, AccountTransfer.fromJson);
+  }
+
+  Future<AccountTransfer> transfer({
+    required String fromAccountId,
+    required String toAccountId,
+    required num amount,
+    num charges = 0,
+    String? referenceNumber,
+    String? notes,
+  }) async {
+    final data = await _api.post('/finance/transfers', body: {
+      'from_account_id': fromAccountId,
+      'to_account_id': toAccountId,
+      'amount': amount,
+      if (charges > 0) 'charges': charges,
+      if (referenceNumber != null && referenceNumber.isNotEmpty)
+        'reference_number': referenceNumber,
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
+    });
+    return AccountTransfer.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<void> deleteTransfer(String id) => _api.delete('/finance/transfers/$id');
+
+  // ── cheques ────────────────────────────────────────────────────
+  Future<List<Cheque>> cheques({String? status, String? direction}) async {
+    final data = await _api.get('/finance/cheques', cache: false, query: {
+      'cheque_status': status,
+      'direction': direction,
+    });
+    return _parseList(data, Cheque.fromJson);
+  }
+
+  Future<ChequeSummary> chequeSummary() async {
+    final data = await _api.get('/finance/cheques/summary', cache: false);
+    return ChequeSummary.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<Cheque> setChequeStatus(String paymentId, String status, {String? note}) async {
+    final data = await _api.patch('/finance/cheques/$paymentId', body: {
+      'status': status,
+      if (note != null && note.isNotEmpty) 'note': note,
+    });
+    return Cheque.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  // ── loans ──────────────────────────────────────────────────────
+  Future<List<Loan>> loans({String? status}) async {
+    final data = await _api.get('/finance/loans', cache: false, query: {'loan_status': status});
+    return _parseList(data, Loan.fromJson);
+  }
+
+  Future<Loan> loan(String id) async {
+    final data = await _api.get('/finance/loans/$id', cache: false);
+    return Loan.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<LoanSummary> loanSummary() async {
+    final data = await _api.get('/finance/loans/summary', cache: false);
+    return LoanSummary.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<Loan> createLoan(Map<String, dynamic> body) async {
+    final data = await _api.post('/finance/loans', body: body);
+    return Loan.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<void> deleteLoan(String id) => _api.delete('/finance/loans/$id');
+
+  Future<List<LoanInstalment>> loanSchedule(String id) async {
+    final data = await _api.get('/finance/loans/$id/schedule', cache: false);
+    return _parseList(data, LoanInstalment.fromJson);
+  }
+
+  Future<List<LoanPayment>> loanPayments(String id) async {
+    final data = await _api.get('/finance/loans/$id/payments', cache: false);
+    return _parseList(data, LoanPayment.fromJson);
+  }
+
+  Future<LoanPayment> repayLoan(
+    String id, {
+    required num amount,
+    String? accountId,
+    String? referenceNumber,
+    String? notes,
+  }) async {
+    final data = await _api.post('/finance/loans/$id/payments', body: {
+      'amount': amount,
+      if (accountId != null) 'account_id': accountId,
+      if (referenceNumber != null && referenceNumber.isNotEmpty)
+        'reference_number': referenceNumber,
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
+    });
+    return LoanPayment.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<void> deleteLoanPayment(String loanId, String paymentId) =>
+      _api.delete('/finance/loans/$loanId/payments/$paymentId');
+}
+
+/// Turns a raw list response into models, tolerating a null body.
+List<T> _parseList<T>(dynamic data, T Function(Map<String, dynamic>) parse) =>
+    (data as List? ?? const [])
+        .map((e) => parse(Map<String, dynamic>.from(e as Map)))
+        .toList();
+
+/// Adapts an `onCached` callback that wants models to the raw callback the
+/// client hands back.
+void Function(dynamic)? _list<T>(
+  void Function(List<T>)? onCached,
+  T Function(Map<String, dynamic>) parse,
+) =>
+    onCached == null ? null : (raw) => onCached(_parseList(raw, parse));
 
 class ExpenseRepository {
   ExpenseRepository(this._api);

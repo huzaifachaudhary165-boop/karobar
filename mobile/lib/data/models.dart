@@ -918,6 +918,551 @@ class Insight {
       );
 }
 
+// ── stock depth ──────────────────────────────────────────────────
+/// A place stock physically sits: the shop, a godown, a second branch.
+class Godown {
+  const Godown({
+    required this.id,
+    required this.name,
+    this.address,
+    this.isDefault = false,
+    this.itemCount = 0,
+    this.stockValue = 0,
+  });
+
+  final String id;
+  final String name;
+  final String? address;
+  final bool isDefault;
+  final int itemCount;
+  final num stockValue;
+
+  factory Godown.fromJson(Map<String, dynamic> json) => Godown(
+        id: _str(json['id']),
+        name: _str(json['name']),
+        address: json['address'] as String?,
+        isDefault: _bool(json['is_default']),
+        itemCount: _num(json['item_count']).toInt(),
+        stockValue: _num(json['stock_value']),
+      );
+}
+
+/// One item's holding at one location.
+class GodownStockRow {
+  const GodownStockRow({
+    required this.itemId,
+    required this.itemName,
+    this.sku,
+    this.unitLabel = 'Pcs',
+    this.qty = 0,
+    this.value = 0,
+  });
+
+  final String itemId;
+  final String itemName;
+  final String? sku;
+  final String unitLabel;
+  final num qty;
+  final num value;
+
+  factory GodownStockRow.fromJson(Map<String, dynamic> json) => GodownStockRow(
+        itemId: _str(json['item_id']),
+        itemName: _str(json['item_name']),
+        sku: json['sku'] as String?,
+        unitLabel: _str(json['unit_label'], 'Pcs'),
+        qty: _num(json['qty']),
+        value: _num(json['value']),
+      );
+}
+
+/// Where one item's stock is spread across locations.
+class ItemGodownRow {
+  const ItemGodownRow({
+    required this.godownId,
+    required this.godownName,
+    this.isDefault = false,
+    this.qty = 0,
+  });
+
+  final String godownId;
+  final String godownName;
+  final bool isDefault;
+  final num qty;
+
+  factory ItemGodownRow.fromJson(Map<String, dynamic> json) => ItemGodownRow(
+        godownId: _str(json['godown_id']),
+        godownName: _str(json['godown_name']),
+        isDefault: _bool(json['is_default']),
+        qty: _num(json['qty']),
+      );
+}
+
+/// A lot of stock with its own dates — the unit a pharmacy actually thinks in.
+class ItemBatch {
+  const ItemBatch({
+    required this.id,
+    required this.itemId,
+    required this.batchNumber,
+    this.manufactureDate,
+    this.expiryDate,
+    this.qty = 0,
+    this.purchasePrice,
+    this.salePrice,
+    this.mrp,
+    this.isExpired = false,
+    this.daysToExpiry,
+  });
+
+  final String id;
+  final String itemId;
+  final String batchNumber;
+  final DateTime? manufactureDate;
+  final DateTime? expiryDate;
+  final num qty;
+  final num? purchasePrice;
+  final num? salePrice;
+  final num? mrp;
+  final bool isExpired;
+  final int? daysToExpiry;
+
+  /// Close enough to expiry that a shop should be moving it now.
+  bool get isExpiringSoon =>
+      !isExpired && daysToExpiry != null && daysToExpiry! <= 30;
+
+  factory ItemBatch.fromJson(Map<String, dynamic> json) => ItemBatch(
+        id: _str(json['id']),
+        itemId: _str(json['item_id']),
+        batchNumber: _str(json['batch_number']),
+        manufactureDate: _date(json['manufacture_date']),
+        expiryDate: _date(json['expiry_date']),
+        qty: _num(json['qty']),
+        purchasePrice: _numOrNull(json['purchase_price']),
+        salePrice: _numOrNull(json['sale_price']),
+        mrp: _numOrNull(json['mrp']),
+        isExpired: _bool(json['is_expired']),
+        daysToExpiry: (json['days_to_expiry'] as num?)?.toInt(),
+      );
+}
+
+/// A batch shown on the expiry watch-list, with the item it belongs to.
+class ExpiringBatch {
+  const ExpiringBatch({
+    required this.batch,
+    required this.itemId,
+    required this.itemName,
+    this.unitLabel = 'Pcs',
+    this.value = 0,
+  });
+
+  final ItemBatch batch;
+  final String itemId;
+  final String itemName;
+  final String unitLabel;
+  final num value;
+
+  int? get daysToExpiry => batch.daysToExpiry;
+  bool get isExpired => batch.isExpired;
+
+  factory ExpiringBatch.fromJson(Map<String, dynamic> json) => ExpiringBatch(
+        batch: ItemBatch.fromJson(
+          Map<String, dynamic>.from(json['batch'] as Map? ?? const {}),
+        ),
+        itemId: _str(json['item_id']),
+        itemName: _str(json['item_name']),
+        unitLabel: _str(json['unit_label'], 'Pcs'),
+        value: _num(json['value']),
+      );
+}
+
+/// One physical unit: an IMEI, a chassis number, a warranty serial.
+class ItemSerial {
+  const ItemSerial({
+    required this.id,
+    required this.itemId,
+    required this.serialNumber,
+    this.status = 'in_stock',
+    this.purchasePrice,
+    this.salePrice,
+    this.warrantyMonths,
+    this.warrantyUntil,
+    this.inWarranty = false,
+    this.soldAt,
+    this.note,
+  });
+
+  final String id;
+  final String itemId;
+  final String serialNumber;
+  final String status;
+  final num? purchasePrice;
+  final num? salePrice;
+  final int? warrantyMonths;
+  final DateTime? warrantyUntil;
+  final bool inWarranty;
+  final DateTime? soldAt;
+  final String? note;
+
+  bool get isAvailable => status == 'in_stock' || status == 'returned';
+
+  factory ItemSerial.fromJson(Map<String, dynamic> json) => ItemSerial(
+        id: _str(json['id']),
+        itemId: _str(json['item_id']),
+        serialNumber: _str(json['serial_number']),
+        status: _str(json['status'], 'in_stock'),
+        purchasePrice: _numOrNull(json['purchase_price']),
+        salePrice: _numOrNull(json['sale_price']),
+        warrantyMonths: (json['warranty_months'] as num?)?.toInt(),
+        warrantyUntil: _date(json['warranty_until']),
+        inWarranty: _bool(json['in_warranty']),
+        soldAt: _date(json['sold_at']),
+        note: json['note'] as String?,
+      );
+}
+
+/// What came back from registering a batch of serials.
+class SerialAddResult {
+  const SerialAddResult({
+    this.added = const [],
+    this.duplicates = const [],
+    this.addedCount = 0,
+    this.availableCount = 0,
+  });
+
+  final List<ItemSerial> added;
+  final List<String> duplicates;
+  final int addedCount;
+  final int availableCount;
+
+  factory SerialAddResult.fromJson(Map<String, dynamic> json) => SerialAddResult(
+        added: _maps(json['added']).map(ItemSerial.fromJson).toList(),
+        duplicates: (json['duplicates'] as List? ?? const [])
+            .map((e) => e.toString())
+            .toList(),
+        addedCount: _num(json['added_count']).toInt(),
+        availableCount: _num(json['available_count']).toInt(),
+      );
+}
+
+// ── money ────────────────────────────────────────────────────────
+/// A cash drawer, bank account or mobile wallet.
+class BankAccount {
+  const BankAccount({
+    required this.id,
+    required this.name,
+    this.accountType = 'cash',
+    this.bankName,
+    this.accountNumber,
+    this.balance = 0,
+    this.isDefault = false,
+  });
+
+  final String id;
+  final String name;
+  final String accountType;
+  final String? bankName;
+  final String? accountNumber;
+  final num balance;
+  final bool isDefault;
+
+  bool get isCash => accountType == 'cash';
+
+  factory BankAccount.fromJson(Map<String, dynamic> json) => BankAccount(
+        id: _str(json['id']),
+        name: _str(json['name']),
+        accountType: _str(json['account_type'], 'cash'),
+        bankName: json['bank_name'] as String?,
+        accountNumber: json['account_number'] as String?,
+        balance: _num(json['balance']),
+        isDefault: _bool(json['is_default']),
+      );
+}
+
+/// Money moved between the shop's own accounts.
+class AccountTransfer {
+  const AccountTransfer({
+    required this.id,
+    required this.fromAccountId,
+    required this.toAccountId,
+    required this.transferDate,
+    this.fromAccountName,
+    this.toAccountName,
+    this.amount = 0,
+    this.charges = 0,
+    this.totalDebited = 0,
+    this.referenceNumber,
+    this.notes,
+  });
+
+  final String id;
+  final String fromAccountId;
+  final String toAccountId;
+  final DateTime transferDate;
+  final String? fromAccountName;
+  final String? toAccountName;
+  final num amount;
+  final num charges;
+  final num totalDebited;
+  final String? referenceNumber;
+  final String? notes;
+
+  factory AccountTransfer.fromJson(Map<String, dynamic> json) => AccountTransfer(
+        id: _str(json['id']),
+        fromAccountId: _str(json['from_account_id']),
+        toAccountId: _str(json['to_account_id']),
+        transferDate: _date(json['transfer_date']) ?? DateTime.now(),
+        fromAccountName: json['from_account_name'] as String?,
+        toAccountName: json['to_account_name'] as String?,
+        amount: _num(json['amount']),
+        charges: _num(json['charges']),
+        totalDebited: _num(json['total_debited']),
+        referenceNumber: json['reference_number'] as String?,
+        notes: json['notes'] as String?,
+      );
+}
+
+/// A cheque written or received, and where it has got to.
+class Cheque {
+  const Cheque({
+    required this.id,
+    required this.number,
+    required this.direction,
+    required this.paymentDate,
+    this.partyId,
+    this.partyName,
+    this.amount = 0,
+    this.chequeDate,
+    this.status = 'pending',
+    this.referenceNumber,
+    this.isOverdue = false,
+    this.daysUntilDue,
+  });
+
+  final String id;
+  final String number;
+  final String direction;
+  final DateTime paymentDate;
+  final String? partyId;
+  final String? partyName;
+  final num amount;
+  final DateTime? chequeDate;
+  final String status;
+  final String? referenceNumber;
+  final bool isOverdue;
+  final int? daysUntilDue;
+
+  bool get isIncoming => direction == 'in';
+  bool get isSettled => status == 'cleared' || status == 'bounced' || status == 'cancelled';
+
+  factory Cheque.fromJson(Map<String, dynamic> json) => Cheque(
+        id: _str(json['id']),
+        number: _str(json['number']),
+        direction: _str(json['direction'], 'in'),
+        paymentDate: _date(json['payment_date']) ?? DateTime.now(),
+        partyId: json['party_id'] as String?,
+        partyName: json['party_name'] as String?,
+        amount: _num(json['amount']),
+        chequeDate: _date(json['cheque_date']),
+        status: _str(json['cheque_status'], 'pending'),
+        referenceNumber: json['reference_number'] as String?,
+        isOverdue: _bool(json['is_overdue']),
+        daysUntilDue: (json['days_until_due'] as num?)?.toInt(),
+      );
+}
+
+class ChequeSummary {
+  const ChequeSummary({
+    this.toDepositCount = 0,
+    this.toDepositAmount = 0,
+    this.toClearCount = 0,
+    this.toClearAmount = 0,
+    this.overdueCount = 0,
+  });
+
+  final int toDepositCount;
+  final num toDepositAmount;
+  final int toClearCount;
+  final num toClearAmount;
+  final int overdueCount;
+
+  bool get isEmpty => toDepositCount == 0 && toClearCount == 0;
+
+  factory ChequeSummary.fromJson(Map<String, dynamic> json) => ChequeSummary(
+        toDepositCount: _num(json['to_deposit_count']).toInt(),
+        toDepositAmount: _num(json['to_deposit_amount']),
+        toClearCount: _num(json['to_clear_count']).toInt(),
+        toClearAmount: _num(json['to_clear_amount']),
+        overdueCount: _num(json['overdue_count']).toInt(),
+      );
+}
+
+/// Borrowed money and what is still owed on it.
+class Loan {
+  const Loan({
+    required this.id,
+    required this.lenderName,
+    required this.startDate,
+    this.loanType = 'bank',
+    this.principal = 0,
+    this.interestRate = 0,
+    this.interestType = 'reducing',
+    this.tenureMonths = 0,
+    this.emiAmount = 0,
+    this.outstandingPrincipal = 0,
+    this.principalPaid = 0,
+    this.interestPaid = 0,
+    this.totalPaid = 0,
+    this.status = 'active',
+    this.instalmentsPaid = 0,
+    this.instalmentsLeft = 0,
+    this.nextDueDate,
+    this.accountNumber,
+    this.notes,
+  });
+
+  final String id;
+  final String lenderName;
+  final DateTime startDate;
+  final String loanType;
+  final num principal;
+  final num interestRate;
+  final String interestType;
+  final int tenureMonths;
+  final num emiAmount;
+  final num outstandingPrincipal;
+  final num principalPaid;
+  final num interestPaid;
+  final num totalPaid;
+  final String status;
+  final int instalmentsPaid;
+  final int instalmentsLeft;
+  final DateTime? nextDueDate;
+  final String? accountNumber;
+  final String? notes;
+
+  bool get isClosed => status == 'closed';
+  bool get isInterestFree => interestType == 'none' || interestRate == 0;
+
+  /// How much of the debt is behind them, 0–1.
+  double get progress {
+    if (principal <= 0) return 0;
+    return (principalPaid / principal).clamp(0, 1).toDouble();
+  }
+
+  factory Loan.fromJson(Map<String, dynamic> json) => Loan(
+        id: _str(json['id']),
+        lenderName: _str(json['lender_name']),
+        startDate: _date(json['start_date']) ?? DateTime.now(),
+        loanType: _str(json['loan_type'], 'bank'),
+        principal: _num(json['principal']),
+        interestRate: _num(json['interest_rate']),
+        interestType: _str(json['interest_type'], 'reducing'),
+        tenureMonths: _num(json['tenure_months']).toInt(),
+        emiAmount: _num(json['emi_amount']),
+        outstandingPrincipal: _num(json['outstanding_principal']),
+        principalPaid: _num(json['principal_paid']),
+        interestPaid: _num(json['interest_paid']),
+        totalPaid: _num(json['total_paid']),
+        status: _str(json['status'], 'active'),
+        instalmentsPaid: _num(json['instalments_paid']).toInt(),
+        instalmentsLeft: _num(json['instalments_left']).toInt(),
+        nextDueDate: _date(json['next_due_date']),
+        accountNumber: json['account_number'] as String?,
+        notes: json['notes'] as String?,
+      );
+}
+
+/// One row of a repayment plan.
+class LoanInstalment {
+  const LoanInstalment({
+    required this.number,
+    required this.dueDate,
+    this.amount = 0,
+    this.principal = 0,
+    this.interest = 0,
+    this.balanceAfter = 0,
+  });
+
+  final int number;
+  final DateTime dueDate;
+  final num amount;
+  final num principal;
+  final num interest;
+  final num balanceAfter;
+
+  factory LoanInstalment.fromJson(Map<String, dynamic> json) => LoanInstalment(
+        number: _num(json['number']).toInt(),
+        dueDate: _date(json['due_date']) ?? DateTime.now(),
+        amount: _num(json['amount']),
+        principal: _num(json['principal']),
+        interest: _num(json['interest']),
+        balanceAfter: _num(json['balance_after']),
+      );
+}
+
+/// A repayment actually made, split the way the lender applies it.
+class LoanPayment {
+  const LoanPayment({
+    required this.id,
+    required this.loanId,
+    required this.paymentDate,
+    this.amount = 0,
+    this.principalComponent = 0,
+    this.interestComponent = 0,
+    this.balanceAfter = 0,
+    this.instalmentNumber,
+    this.referenceNumber,
+    this.notes,
+  });
+
+  final String id;
+  final String loanId;
+  final DateTime paymentDate;
+  final num amount;
+  final num principalComponent;
+  final num interestComponent;
+  final num balanceAfter;
+  final int? instalmentNumber;
+  final String? referenceNumber;
+  final String? notes;
+
+  factory LoanPayment.fromJson(Map<String, dynamic> json) => LoanPayment(
+        id: _str(json['id']),
+        loanId: _str(json['loan_id']),
+        paymentDate: _date(json['payment_date']) ?? DateTime.now(),
+        amount: _num(json['amount']),
+        principalComponent: _num(json['principal_component']),
+        interestComponent: _num(json['interest_component']),
+        balanceAfter: _num(json['balance_after']),
+        instalmentNumber: (json['instalment_number'] as num?)?.toInt(),
+        referenceNumber: json['reference_number'] as String?,
+        notes: json['notes'] as String?,
+      );
+}
+
+class LoanSummary {
+  const LoanSummary({
+    this.activeCount = 0,
+    this.totalBorrowed = 0,
+    this.totalOutstanding = 0,
+    this.monthlyCommitment = 0,
+    this.interestPaid = 0,
+  });
+
+  final int activeCount;
+  final num totalBorrowed;
+  final num totalOutstanding;
+  final num monthlyCommitment;
+  final num interestPaid;
+
+  factory LoanSummary.fromJson(Map<String, dynamic> json) => LoanSummary(
+        activeCount: _num(json['active_count']).toInt(),
+        totalBorrowed: _num(json['total_borrowed']),
+        totalOutstanding: _num(json['total_outstanding']),
+        monthlyCommitment: _num(json['monthly_commitment']),
+        interestPaid: _num(json['interest_paid']),
+      );
+}
+
 // ── pagination ───────────────────────────────────────────────────
 class Paged<T> {
   const Paged({
