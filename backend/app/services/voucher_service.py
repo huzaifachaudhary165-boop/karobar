@@ -37,6 +37,16 @@ from app.utils.tax import compute_line_tax, is_interstate
 _LOCKED_STATUSES = {VoucherStatus.CANCELLED, VoucherStatus.CONVERTED}
 
 
+def _has_strn(party: Party | None) -> bool:
+    """Whether a buyer is registered for sales tax.
+
+    The STRN, not the NTN: an NTN is income tax registration and does not
+    exempt a buyer from further tax. Treating the two as the same is how a
+    shop ends up under-charging.
+    """
+    return bool(party and party.strn and party.strn.strip())
+
+
 def _label(voucher_type: str) -> str:
     """'purchase_order' → 'purchase order', for a message a shopkeeper reads."""
     return str(voucher_type).replace("_", " ")
@@ -115,7 +125,11 @@ class VoucherService(BaseService[Voucher]):
         await self.db.flush()
 
         await self._build_lines(voucher, payload.lines, interstate=interstate, inclusive=inclusive)
-        self._compute_totals(voucher, cfg)
+        # A walk-in with no party at all is unregistered by definition, which
+        # is precisely the case further tax exists for.
+        self._compute_totals(
+            voucher, cfg, buyer_registered=_has_strn(party)
+        )
 
         is_draft = voucher.status == VoucherStatus.DRAFT
         if not is_draft:
@@ -201,7 +215,10 @@ class VoucherService(BaseService[Voucher]):
         if "status" in data and data["status"]:
             voucher.status = str(data["status"])
 
-        self._compute_totals(voucher, cfg)
+        party = (
+            await self.parties.get(voucher.party_id) if voucher.party_id else None
+        )
+        self._compute_totals(voucher, cfg, buyer_registered=_has_strn(party))
 
         if voucher.status != VoucherStatus.DRAFT:
             party = await self.parties.get(voucher.party_id) if voucher.party_id else None
@@ -603,7 +620,9 @@ class VoucherService(BaseService[Voucher]):
         await self.db.flush()
         await self.db.refresh(voucher, ["lines"])
 
-    def _compute_totals(self, voucher: Voucher, cfg: BusinessSettings) -> None:
+    def _compute_totals(
+        self, voucher: Voucher, cfg: BusinessSettings, *, buyer_registered: bool = True
+    ) -> None:
         lines = voucher.lines
         subtotal = money(sum((line.qty * line.rate for line in lines), ZERO))
         line_discounts = money(sum((line.discount_amount for line in lines), ZERO))
@@ -633,8 +652,22 @@ class VoucherService(BaseService[Voucher]):
             net_taxable = taxable
 
         tax_total = money(cgst + sgst + igst + cess)
+
+        # Pakistani further tax: charged on top when the buyer has no sales tax
+        # registration. A shop that has never heard of it under-charges every
+        # walk-in customer and is assessed for the difference years later. Only
+        # on outward supplies — a shop does not levy it on its own purchases.
+        further = ZERO
+        if (
+            cfg.fbr_enabled
+            and cfg.further_tax_enabled
+            and not buyer_registered
+            and voucher.voucher_type in (VoucherType.SALE, VoucherType.SALE_RETURN)
+        ):
+            further = pct(net_taxable, cfg.further_tax_rate)
+
         charges = money(voucher.shipping_charge + voucher.packaging_charge + voucher.other_charge)
-        raw_total = money(net_taxable + tax_total + charges)
+        raw_total = money(net_taxable + tax_total + further + charges)
 
         round_off = ZERO
         if cfg.auto_round_off:
@@ -650,6 +683,7 @@ class VoucherService(BaseService[Voucher]):
         voucher.igst_amount = igst
         voucher.cess_amount = cess
         voucher.tax_amount = tax_total
+        voucher.further_tax_amount = further
         voucher.round_off = round_off
         voucher.total = raw_total
         voucher.balance_amount = money(raw_total - voucher.paid_amount)

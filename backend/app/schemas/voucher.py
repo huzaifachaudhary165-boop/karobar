@@ -193,6 +193,10 @@ class VoucherOut(ORMModel):
 
     is_tax_inclusive: bool
     is_interstate: bool
+    # Pakistani further tax. Present whether or not the shop charges it, so a
+    # client never has to guess whether a missing field means zero.
+    further_tax_amount: Decimal = Decimal("0")
+
     is_overdue: bool = False
     days_overdue: int = 0
     # Document types this one may still be turned into — empty once it has been

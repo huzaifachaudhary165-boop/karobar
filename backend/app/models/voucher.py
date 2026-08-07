@@ -65,6 +65,12 @@ class Voucher(Base, UUIDMixin, TenantMixin, TimestampMixin, SoftDeleteMixin, Syn
     igst_amount: Mapped[Decimal] = mapped_column(Money(), default=Decimal("0"), nullable=False)
     cess_amount: Mapped[Decimal] = mapped_column(Money(), default=Decimal("0"), nullable=False)
     tax_amount: Mapped[Decimal] = mapped_column(Money(), default=Decimal("0"), nullable=False)
+    # Pakistani further tax, charged when the buyer has no sales tax
+    # registration. Stored rather than recomputed: it is money the customer
+    # actually paid, and the rate can change between the sale and the return.
+    further_tax_amount: Mapped[Decimal] = mapped_column(
+        Money(), default=Decimal("0"), nullable=False
+    )
 
     shipping_charge: Mapped[Decimal] = mapped_column(Money(), default=Decimal("0"), nullable=False)
     packaging_charge: Mapped[Decimal] = mapped_column(Money(), default=Decimal("0"), nullable=False)

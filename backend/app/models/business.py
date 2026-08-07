@@ -136,6 +136,29 @@ class BusinessSettings(Base, UUIDMixin, TimestampMixin):
     enable_serial_numbers: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     enable_multi_godown: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    # ── Pakistani sales tax (FBR) ──────────────────────────────────
+    # Off by default and deliberately so: most small shops are not registered
+    # for sales tax at all, and putting an output-tax column in front of one
+    # is how they conclude the app is meant for somebody else.
+    fbr_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # A setting, not a constant — the standard rate has moved between 16, 17
+    # and 18 percent inside a decade.
+    sales_tax_rate: Mapped[Decimal] = mapped_column(
+        Money(), default=Decimal("18"), nullable=False
+    )
+    # Charged on top when the buyer has no STRN. The rule shops get assessed
+    # for years later, with penalty, having never heard of it.
+    further_tax_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    further_tax_rate: Mapped[Decimal] = mapped_column(
+        Money(), default=Decimal("3"), nullable=False
+    )
+    withholding_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    withholding_rate: Mapped[Decimal] = mapped_column(
+        Money(), default=Decimal("0"), nullable=False
+    )
+    # Which authority collects the services tax where the shop trades.
+    province: Mapped[str | None] = mapped_column(String(24), nullable=True)
+
     # print
     invoice_template: Mapped[str] = mapped_column(String(32), default="classic", nullable=False)
     print_size: Mapped[str] = mapped_column(String(16), default="A4", nullable=False)  # A4|A5|thermal58|thermal80

@@ -34,6 +34,10 @@ class PartyBase(InputModel):
 
     gstin: str | None = Field(None, max_length=20)
     ntn: str | None = Field(None, max_length=20)
+    # Sales tax registration, and deliberately not the same field as the NTN:
+    # an NTN is income tax registration and does not exempt a buyer from
+    # further tax. This is what decides whether it is charged.
+    strn: str | None = Field(None, max_length=24)
     pan: str | None = Field(None, max_length=20)
 
     credit_limit: MoneyField | None = None
@@ -79,6 +83,7 @@ class PartyUpdate(InputModel):
     country: str | None = None
     gstin: str | None = None
     ntn: str | None = None
+    strn: str | None = None
     pan: str | None = None
     credit_limit: MoneyField | None = None
     credit_days: int | None = None
@@ -121,6 +126,7 @@ class PartyOut(ORMModel):
 
     gstin: str | None = None
     ntn: str | None = None
+    strn: str | None = None
     pan: str | None = None
 
     opening_balance: Decimal

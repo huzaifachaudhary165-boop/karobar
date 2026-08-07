@@ -62,6 +62,10 @@ class Party(Base, UUIDMixin, TenantMixin, TimestampMixin, SoftDeleteMixin, SyncM
     # tax
     gstin: Mapped[str | None] = mapped_column(String(20), nullable=True)
     ntn: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Sales tax registration. Distinct from the NTN on purpose: an NTN is
+    # income tax registration and does not exempt a buyer from further tax, so
+    # a shop that treats the two as the same under-charges every such customer.
+    strn: Mapped[str | None] = mapped_column(String(24), nullable=True)
     pan: Mapped[str | None] = mapped_column(String(20), nullable=True)
     is_registered: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 

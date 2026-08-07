@@ -188,6 +188,17 @@ class SettingsUpdate(InputModel):
     default_low_stock_qty: MoneyField | None = None
     extra: dict[str, Any] | None = None
 
+    # ── Pakistani sales tax ────────────────────────────────────────
+    fbr_enabled: bool | None = None
+    sales_tax_rate: MoneyField | None = Field(None, ge=0, le=100)
+    further_tax_enabled: bool | None = None
+    further_tax_rate: MoneyField | None = Field(None, ge=0, le=100)
+    withholding_enabled: bool | None = None
+    withholding_rate: MoneyField | None = Field(None, ge=0, le=100)
+    province: str | None = Field(
+        None, pattern="^(punjab|sindh|kpk|balochistan|islamabad)$"
+    )
+
     @field_validator("invoice_template")
     @classmethod
     def _known_theme(cls, value: str | None) -> str | None:
@@ -231,6 +242,15 @@ class SettingsOut(ORMModel):
     enable_batches: bool
     enable_serial_numbers: bool
     enable_multi_godown: bool
+
+    fbr_enabled: bool = False
+    sales_tax_rate: Decimal = Decimal("18")
+    further_tax_enabled: bool = True
+    further_tax_rate: Decimal = Decimal("3")
+    withholding_enabled: bool = False
+    withholding_rate: Decimal = Decimal("0")
+    province: str | None = None
+
     invoice_template: str
     print_size: str
     terms_and_conditions: str | None = None
