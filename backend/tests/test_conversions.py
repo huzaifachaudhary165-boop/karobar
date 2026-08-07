@@ -173,6 +173,34 @@ async def test_a_cancelled_document_cannot_be_converted(shop):
     assert refused.status_code == 422, refused.text
 
 
+@pytest.mark.asyncio
+async def test_each_document_kind_gets_its_own_number_series(shop):
+    """Two documents a customer might hold at once must not read alike.
+
+    The unique index tolerates a repeat because it is scoped by type, so this
+    never failed loudly — a quotation and a proforma were both QTN-0001 and the
+    only person to notice was whoever had to file them.
+    """
+    numbers = {}
+    for voucher_type, party in (
+        ("quotation", "customer"),
+        ("proforma", "customer"),
+        ("sale_order", "customer"),
+        ("purchase_order", "supplier"),
+        ("delivery_challan", "customer"),
+        ("sale", "customer"),
+        ("purchase", "supplier"),
+    ):
+        created = await _document(shop, voucher_type, party=party)
+        numbers[voucher_type] = created["number"]
+
+    assert len(set(numbers.values())) == len(numbers), (
+        f"two documents share a number: {numbers}"
+    )
+    prefixes = {n.split("-")[0] for n in numbers.values()}
+    assert len(prefixes) == len(numbers), f"two kinds share a prefix: {numbers}"
+
+
 # ── the app holds the same three facts about each document ─────────
 #
 # `mobile/lib/core/utils/document_types.dart` decides which party to pick,

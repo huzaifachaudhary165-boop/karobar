@@ -17,7 +17,10 @@ SERIES_PREFIX_FIELD: dict[str, str] = {
     VoucherType.SALE: "invoice_prefix",
     VoucherType.PURCHASE: "purchase_prefix",
     VoucherType.QUOTATION: "quotation_prefix",
-    VoucherType.PROFORMA: "quotation_prefix",
+    # PROFORMA deliberately absent, so it keeps its own PRO- prefix. Sharing the
+    # quotation's produced a quotation and a proforma both numbered QTN-0001:
+    # the unique index tolerates it because it is scoped by type, but a customer
+    # holding both pieces of paper cannot tell which is which.
     "payment_in": "payment_prefix",
     # `payment_out` is deliberately absent. Money received and money paid are
     # counted in separate series, so sharing a prefix would give the first
