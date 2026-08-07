@@ -17,6 +17,7 @@ from app.models.item import (
 )
 from app.models.party import Party, PartyGroup
 from app.models.pricing import DiscountScheme, PriceList, PriceListEntry
+from app.models.recurring import RecurringInvoice
 from app.models.payment import Account, Payment, PaymentAllocation
 from app.models.system import (
     Attachment, AuditLog, ChangeLog, Integration, MessageLog, Notification,
@@ -39,7 +40,7 @@ __all__ = [
     "PriceList", "PriceListEntry", "DiscountScheme",
     # transactions
     "Voucher", "VoucherLine", "Payment", "PaymentAllocation", "Expense",
-    "AccountTransfer", "Loan", "LoanPayment",
+    "AccountTransfer", "Loan", "LoanPayment", "RecurringInvoice",
     # ai
     "AiConversation", "AiMessage", "AiToolCall", "AiUsage", "AiInsight", "OcrJob",
     # system
@@ -70,4 +71,5 @@ SYNCABLE_MODELS: dict[str, type] = {
     "account": Account,
     "price_list": PriceList,
     "discount_scheme": DiscountScheme,
+    "recurring_invoice": RecurringInvoice,
 }

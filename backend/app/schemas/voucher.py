@@ -118,7 +118,9 @@ class VoucherCreate(InputModel, SyncFields):
 
     parent_voucher_id: str | None = None
     payment: PaymentInline | None = None
-    source: str = Field("manual", pattern="^(manual|ai|ocr|import|api)$")
+    # `recurring` matters as much as the rest: a bill nobody remembers raising
+    # is one someone will ask about, and "the schedule did it" is the answer.
+    source: str = Field("manual", pattern="^(manual|ai|ocr|import|api|recurring)$")
 
     @model_validator(mode="after")
     def _party_required_for_credit(self):
