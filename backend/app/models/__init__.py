@@ -16,6 +16,7 @@ from app.models.item import (
     Godown, GodownStock, Item, ItemBatch, ItemCategory, ItemSerial, StockLedgerEntry, Unit,
 )
 from app.models.party import Party, PartyGroup
+from app.models.pricing import DiscountScheme, PriceList, PriceListEntry
 from app.models.payment import Account, Payment, PaymentAllocation
 from app.models.system import (
     Attachment, AuditLog, ChangeLog, Integration, MessageLog, Notification,
@@ -35,6 +36,7 @@ __all__ = [
     "Item", "ItemCategory", "ItemBatch", "ItemSerial", "Unit", "Godown", "GodownStock",
     "StockLedgerEntry",
     "TaxRate", "ExpenseCategory", "Account",
+    "PriceList", "PriceListEntry", "DiscountScheme",
     # transactions
     "Voucher", "VoucherLine", "Payment", "PaymentAllocation", "Expense",
     "AccountTransfer", "Loan", "LoanPayment",
@@ -66,4 +68,6 @@ SYNCABLE_MODELS: dict[str, type] = {
     "expense_category": ExpenseCategory,
     "tax_rate": TaxRate,
     "account": Account,
+    "price_list": PriceList,
+    "discount_scheme": DiscountScheme,
 }
