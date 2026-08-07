@@ -1159,6 +1159,219 @@ class SerialAddResult {
       );
 }
 
+/// A number as a shopkeeper would write it: 8 rather than 8.0, 2.5 as 2.5.
+///
+/// Percentages arrive as "8.0000" and parse to a double, and a screen reading
+/// "8.0% off" looks to a shopkeeper like the app has a fault.
+String trimZeros(num value) =>
+    value == value.roundToDouble() ? value.toInt().toString() : value.toString();
+
+// ── pricing ──────────────────────────────────────────────────────
+/// A set of rates for a kind of customer — thok, parchoon, staff.
+class PriceList {
+  const PriceList({
+    required this.id,
+    required this.name,
+    this.description,
+    this.adjustPercent = 0,
+    this.basePrice = 'sale',
+    this.isDefault = false,
+    this.isActive = true,
+    this.itemCount = 0,
+  });
+
+  final String id;
+  final String name;
+  final String? description;
+  final num adjustPercent;
+  final String basePrice;
+  final bool isDefault;
+  final bool isActive;
+  final int itemCount;
+
+  bool get isDiscount => adjustPercent < 0;
+
+  /// "8% off sale price", or "12% on MRP" — what the list actually does.
+  String get ruleLabel {
+    if (adjustPercent == 0) {
+      return basePrice == 'sale' ? 'Item prices' : 'At $basePrice price';
+    }
+    final direction = adjustPercent < 0 ? 'off' : 'on';
+    return '${trimZeros(adjustPercent.abs())}% $direction $basePrice price';
+  }
+
+  factory PriceList.fromJson(Map<String, dynamic> json) => PriceList(
+        id: _str(json['id']),
+        name: _str(json['name']),
+        description: json['description'] as String?,
+        adjustPercent: _num(json['adjust_percent']),
+        basePrice: _str(json['base_price'], 'sale'),
+        isDefault: _bool(json['is_default']),
+        isActive: _bool(json['is_active']),
+        itemCount: _num(json['item_count']).toInt(),
+      );
+}
+
+/// One item's named rate on a list.
+class PriceEntry {
+  const PriceEntry({
+    required this.id,
+    required this.itemId,
+    required this.itemName,
+    this.sku,
+    this.unitLabel = 'Pcs',
+    this.salePrice = 0,
+    this.price = 0,
+    this.minQty,
+  });
+
+  final String id;
+  final String itemId;
+  final String itemName;
+  final String? sku;
+  final String unitLabel;
+  final num salePrice;
+  final num price;
+  final num? minQty;
+
+  factory PriceEntry.fromJson(Map<String, dynamic> json) => PriceEntry(
+        id: _str(json['id']),
+        itemId: _str(json['item_id']),
+        itemName: _str(json['item_name']),
+        sku: json['sku'] as String?,
+        unitLabel: _str(json['unit_label'], 'Pcs'),
+        salePrice: _num(json['sale_price']),
+        price: _num(json['price']),
+        minQty: _numOrNull(json['min_qty']),
+      );
+}
+
+/// A rule that takes something off a bill without anyone keying it.
+class DiscountScheme {
+  const DiscountScheme({
+    required this.id,
+    required this.name,
+    this.description,
+    this.scope = 'bill',
+    this.itemId,
+    this.categoryId,
+    this.partyId,
+    this.minAmount,
+    this.minQty,
+    this.discountType = 'percent',
+    this.discountValue = 0,
+    this.maxDiscount,
+    this.startsOn,
+    this.endsOn,
+    this.isActive = true,
+    this.isRunning = false,
+    this.priority = 0,
+    this.timesUsed = 0,
+  });
+
+  final String id;
+  final String name;
+  final String? description;
+  final String scope;
+  final String? itemId;
+  final String? categoryId;
+  final String? partyId;
+  final num? minAmount;
+  final num? minQty;
+  final String discountType;
+  final num discountValue;
+  final num? maxDiscount;
+  final DateTime? startsOn;
+  final DateTime? endsOn;
+  final bool isActive;
+  final bool isRunning;
+  final int priority;
+  final int timesUsed;
+
+  bool get isPercent => discountType == 'percent';
+
+  /// "10% off", "Rs 200 off" — what a customer would be told.
+  String get valueLabel => isPercent
+      ? '${trimZeros(discountValue)}% off'
+      : 'Rs ${trimZeros(discountValue)} off';
+
+  factory DiscountScheme.fromJson(Map<String, dynamic> json) => DiscountScheme(
+        id: _str(json['id']),
+        name: _str(json['name']),
+        description: json['description'] as String?,
+        scope: _str(json['scope'], 'bill'),
+        itemId: json['item_id'] as String?,
+        categoryId: json['category_id'] as String?,
+        partyId: json['party_id'] as String?,
+        minAmount: _numOrNull(json['min_amount']),
+        minQty: _numOrNull(json['min_qty']),
+        discountType: _str(json['discount_type'], 'percent'),
+        discountValue: _num(json['discount_value']),
+        maxDiscount: _numOrNull(json['max_discount']),
+        startsOn: _date(json['starts_on']),
+        endsOn: _date(json['ends_on']),
+        isActive: _bool(json['is_active']),
+        isRunning: _bool(json['is_running']),
+        priority: _num(json['priority']).toInt(),
+        timesUsed: _num(json['times_used']).toInt(),
+      );
+}
+
+/// What one line should cost, and why.
+class QuoteLine {
+  const QuoteLine({
+    required this.itemId,
+    this.qty = 1,
+    this.rate = 0,
+    this.lineTotal = 0,
+    this.discount = 0,
+    this.net = 0,
+    this.source = 'item',
+    this.priceListId,
+    this.priceListName,
+    this.schemeName,
+    this.heldAtMinimum = false,
+  });
+
+  final String itemId;
+  final num qty;
+  final num rate;
+  final num lineTotal;
+  final num discount;
+  final num net;
+  final String source;
+  final String? priceListId;
+  final String? priceListName;
+  final String? schemeName;
+  final bool heldAtMinimum;
+
+  /// Whether this rate came from anywhere other than the item itself, so the
+  /// bill screen can say where — a number a shopkeeper cannot account for is
+  /// worse than no discount at all.
+  bool get isSpecial => source != 'item' || discount > 0 || heldAtMinimum;
+
+  String? get reason {
+    if (heldAtMinimum) return 'Held at the minimum price';
+    if (schemeName != null && discount > 0) return schemeName;
+    if (priceListName != null && source != 'item') return priceListName;
+    return null;
+  }
+
+  factory QuoteLine.fromJson(Map<String, dynamic> json) => QuoteLine(
+        itemId: _str(json['item_id']),
+        qty: _num(json['qty']),
+        rate: _num(json['rate']),
+        lineTotal: _num(json['line_total']),
+        discount: _num(json['discount']),
+        net: _num(json['net']),
+        source: _str(json['source'], 'item'),
+        priceListId: json['price_list_id'] as String?,
+        priceListName: json['price_list_name'] as String?,
+        schemeName: json['scheme_name'] as String?,
+        heldAtMinimum: _bool(json['held_at_minimum']),
+      );
+}
+
 /// One of the looks an invoice can print in.
 class InvoiceTheme {
   const InvoiceTheme({

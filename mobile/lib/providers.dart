@@ -68,6 +68,8 @@ final stockRepositoryProvider =
     Provider((ref) => StockRepository(ref.watch(apiClientProvider)));
 final financeRepositoryProvider =
     Provider((ref) => FinanceRepository(ref.watch(apiClientProvider)));
+final pricingRepositoryProvider =
+    Provider((ref) => PricingRepository(ref.watch(apiClientProvider)));
 
 // ── offline queue ────────────────────────────────────────────────
 /// Long-lived: it listens to connectivity for the whole session and flushes the

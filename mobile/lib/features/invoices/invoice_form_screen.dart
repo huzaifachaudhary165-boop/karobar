@@ -40,6 +40,18 @@ class _LineDraft {
   num taxRate;
   num discountPercent = 0;
 
+  /// Why this rate is what it is, when it did not simply come off the item.
+  ///
+  /// Shown on the line so the shopkeeper can account for it out loud. A total
+  /// nobody can explain to the customer in front of them is worse than no
+  /// discount at all.
+  String? priceReason;
+
+  /// True once the shopkeeper types over the quoted rate. Re-quoting then
+  /// leaves this line alone: the number they agreed with the customer must not
+  /// be overwritten by a price list a moment later.
+  bool rateEditedByHand = false;
+
   num get gross => qty * rate;
   num get discount => gross * discountPercent / 100;
   num get taxable => gross - discount;
@@ -127,7 +139,49 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
       isScrollControlled: true,
       builder: (_) => _PartyPicker(isSupplier: _isPurchase),
     );
-    if (party != null) setState(() => _party = party);
+    if (party != null) {
+      setState(() => _party = party);
+      // Their price list may put every line on a different rate, so re-quote
+      // the whole bill rather than leaving the first few at retail.
+      await _requote();
+    }
+  }
+
+  /// Asks the server what these lines should cost for this customer.
+  ///
+  /// Only sales are quoted: a price list is what a shop charges, not what it
+  /// pays, and repricing a purchase would overwrite the supplier's own invoice.
+  /// Lines the shopkeeper has typed a rate into are left exactly as typed.
+  Future<void> _requote() async {
+    if (_isPurchase || _lines.isEmpty) return;
+
+    final quotable = _lines.where((line) => !line.rateEditedByHand).toList();
+    if (quotable.isEmpty) return;
+
+    try {
+      final quotes = await ref.read(pricingRepositoryProvider).quote(
+            lines: [
+              for (final line in quotable) (itemId: line.item.id, qty: line.qty),
+            ],
+            partyId: _party?.id,
+          );
+      if (!mounted) return;
+
+      final byItem = {for (final quote in quotes) quote.itemId: quote};
+      setState(() {
+        for (final line in quotable) {
+          final quote = byItem[line.item.id];
+          if (quote == null) continue;
+          line.rate = quote.rate;
+          line.discountPercent =
+              quote.lineTotal > 0 ? (quote.discount / quote.lineTotal) * 100 : 0;
+          line.priceReason = quote.reason;
+        }
+      });
+    } catch (_) {
+      // Pricing is an improvement on the item's own rate, not a precondition
+      // for billing. A shop with no signal still has to be able to sell.
+    }
   }
 
   Future<void> _addLine() async {
@@ -136,13 +190,20 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
       isScrollControlled: true,
       builder: (_) => const _ItemPicker(),
     );
-    if (item != null) _addItem(item);
+    if (item != null) {
+      _addItem(item);
+      await _requote();
+    }
   }
 
   /// Scan straight onto the bill. The sheet reopens after each code so a whole
   /// basket can be rung up without tapping between scans.
   Future<void> _scanLine() async {
-    while (mounted) {
+    while (true) {
+      // Re-checked at the top of every pass: quoting the last scan awaits, and
+      // the screen can be closed while that is in flight.
+      if (!mounted) return;
+
       final code = await scanBarcode(context);
       if (code == null || !mounted) return;
 
@@ -150,6 +211,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
         final item = await ref.read(itemRepositoryProvider).byBarcode(code);
         if (!mounted) return;
         _addItem(item);
+        await _requote();
       } on ApiException catch (error) {
         if (!mounted) return;
         showError(
@@ -532,7 +594,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
   }
 }
 
-class _LineCard extends StatelessWidget {
+class _LineCard extends StatefulWidget {
   const _LineCard({
     required this.line,
     required this.symbol,
@@ -546,8 +608,37 @@ class _LineCard extends StatelessWidget {
   final VoidCallback onRemove;
 
   @override
+  State<_LineCard> createState() => _LineCardState();
+}
+
+class _LineCardState extends State<_LineCard> {
+  late final _rate = TextEditingController(text: Fmt.qty(widget.line.rate));
+
+  @override
+  void dispose() {
+    _rate.dispose();
+    super.dispose();
+  }
+
+  /// Pulls a rate the price list changed underneath this field.
+  ///
+  /// A `TextFormField` with `initialValue` takes it once and never again, so a
+  /// re-quote after the customer is chosen would move the rate on the bill
+  /// while the box on screen still showed the old one — and the shopkeeper
+  /// would read out a number the invoice does not carry.
+  @override
+  void didUpdateWidget(_LineCard old) {
+    super.didUpdateWidget(old);
+    if (widget.line.rateEditedByHand) return;
+
+    final quoted = Fmt.qty(widget.line.rate);
+    if (quoted != _rate.text) _rate.text = quoted;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final line = widget.line;
 
     return AppCard(
       padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
@@ -566,7 +657,7 @@ class _LineCard extends StatelessWidget {
               IconButton(
                 icon: const Icon(Icons.close, size: 18),
                 visualDensity: VisualDensity.compact,
-                onPressed: onRemove,
+                onPressed: widget.onRemove,
               ),
             ],
           ),
@@ -577,24 +668,28 @@ class _LineCard extends StatelessWidget {
                 unit: line.item.unitLabel,
                 onChanged: (value) {
                   line.qty = value;
-                  onChanged();
+                  widget.onChanged();
                 },
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: TextFormField(
-                  initialValue: Fmt.qty(line.rate),
+                child: TextField(
+                  controller: _rate,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   textAlign: TextAlign.right,
                   decoration: InputDecoration(
                     isDense: true,
-                    prefixText: symbol,
+                    prefixText: widget.symbol,
                     contentPadding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                   ),
                   onChanged: (value) {
                     line.rate = num.tryParse(value) ?? line.rate;
-                    onChanged();
+                    // From here on this line is the shopkeeper's, not the price
+                    // list's. What they agreed with the customer stands.
+                    line.rateEditedByHand = true;
+                    line.priceReason = null;
+                    widget.onChanged();
                   },
                 ),
               ),
@@ -602,7 +697,7 @@ class _LineCard extends StatelessWidget {
               SizedBox(
                 width: 84,
                 child: Text(
-                  Fmt.money(line.total, symbol: symbol, decimals: false),
+                  Fmt.money(line.total, symbol: widget.symbol, decimals: false),
                   textAlign: TextAlign.right,
                   style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
                 ),
@@ -610,6 +705,34 @@ class _LineCard extends StatelessWidget {
               const SizedBox(width: 8),
             ],
           ),
+
+          // Where the rate came from. Without this the shopkeeper is reading
+          // out a discount they cannot account for when asked.
+          if (line.priceReason != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, right: 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.sell_outlined, size: 13, color: AppColors.success),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      line.priceReason!,
+                      style: theme.textTheme.labelSmall
+                          ?.copyWith(color: AppColors.success),
+                    ),
+                  ),
+                  if (line.discountPercent > 0)
+                    Text(
+                      '-${Fmt.money(line.discount, symbol: widget.symbol, decimals: false)}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: AppColors.success,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                ],
+              ),
+            ),
         ],
       ),
     );

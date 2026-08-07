@@ -157,6 +157,9 @@ class ApiClient {
             options: timeout == null ? null : Options(receiveTimeout: timeout),
           ));
 
+  Future<dynamic> put(String path, {Object? body}) =>
+      _send(() => _dio.put<dynamic>(path, data: body));
+
   Future<dynamic> patch(String path, {Object? body}) =>
       _send(() => _dio.patch<dynamic>(path, data: body));
 

@@ -777,6 +777,74 @@ class FinanceRepository {
       _api.delete('/finance/loans/$loanId/payments/$paymentId');
 }
 
+/// Price lists, discount offers, and what a line should cost.
+class PricingRepository {
+  PricingRepository(this._api);
+
+  final ApiClient _api;
+
+  Future<List<PriceList>> lists() async {
+    final data = await _api.get('/pricing/lists', cache: false);
+    return _parseList(data, PriceList.fromJson);
+  }
+
+  Future<PriceList> createList(Map<String, dynamic> body) async {
+    final data = await _api.post('/pricing/lists', body: body);
+    return PriceList.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<void> deleteList(String id) => _api.delete('/pricing/lists/$id');
+
+  Future<List<PriceEntry>> entries(String listId) async {
+    final data = await _api.get('/pricing/lists/$listId/items', cache: false);
+    return _parseList(data, PriceEntry.fromJson);
+  }
+
+  Future<void> setEntry(String listId, String itemId, num price, {num? minQty}) =>
+      _api.put('/pricing/lists/$listId/items', body: {
+        'item_id': itemId,
+        'price': price,
+        if (minQty != null) 'min_qty': minQty,
+      });
+
+  Future<void> removeEntry(String listId, String itemId) =>
+      _api.delete('/pricing/lists/$listId/items/$itemId');
+
+  Future<List<DiscountScheme>> schemes({bool onlyRunning = false}) async {
+    final data = await _api.get(
+      '/pricing/schemes',
+      cache: false,
+      query: {'only_running': onlyRunning},
+    );
+    return _parseList(data, DiscountScheme.fromJson);
+  }
+
+  Future<DiscountScheme> createScheme(Map<String, dynamic> body) async {
+    final data = await _api.post('/pricing/schemes', body: body);
+    return DiscountScheme.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<void> deleteScheme(String id) => _api.delete('/pricing/schemes/$id');
+
+  /// What these lines should cost for this customer, right now.
+  ///
+  /// Asked as lines are added rather than on save: the bill charges what the
+  /// shopkeeper read out to the customer, so the server is never allowed to
+  /// reprice a voucher it is handed.
+  Future<List<QuoteLine>> quote({
+    required List<({String itemId, num qty})> lines,
+    String? partyId,
+  }) async {
+    final data = await _api.post('/pricing/quote', body: {
+      'lines': [
+        for (final line in lines) {'item_id': line.itemId, 'qty': line.qty},
+      ],
+      if (partyId != null) 'party_id': partyId,
+    });
+    return _parseList(data, QuoteLine.fromJson);
+  }
+}
+
 /// Turns a raw list response into models, tolerating a null body.
 List<T> _parseList<T>(dynamic data, T Function(Map<String, dynamic>) parse) =>
     (data as List? ?? const [])
