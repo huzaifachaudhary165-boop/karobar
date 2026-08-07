@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import BusinessRuleError, NotFoundError
 from app.core.money import ZERO, D, money
 from app.core.pagination import PageParams, paginate
-from app.models.enums import PaymentDirection, VoucherStatus, VoucherType
+from app.models.enums import PaymentDirection, PaymentMode, VoucherStatus, VoucherType
 from app.models.party import Party
 from app.models.payment import Account, Payment, PaymentAllocation
 from app.models.voucher import Voucher
@@ -401,6 +401,12 @@ class PaymentService(BaseService[Payment]):
         await self.db.flush()
 
     async def _default_account_id(self, mode: str) -> str | None:
+        # Points are not money in any drawer. Defaulting them into the bank
+        # account the way every other mode does would inflate the bank balance
+        # by the value of every reward the shop has ever given away.
+        if mode == PaymentMode.POINTS:
+            return None
+
         wanted = "cash" if mode == "cash" else "bank"
         row = (
             await self.db.execute(

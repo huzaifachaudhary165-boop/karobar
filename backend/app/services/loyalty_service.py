@@ -15,8 +15,10 @@ from app.core.loyalty import (
 )
 from app.core.money import ZERO, money
 from app.models.base import utcnow
+from app.models.enums import PaymentDirection, PaymentMode
 from app.models.loyalty import LoyaltyEntry, LoyaltyProgram
 from app.models.party import Party
+from app.models.payment import PaymentAllocation
 from app.services.base import ActorContext, stamp_sync
 
 EARNED = "earned"
@@ -227,16 +229,95 @@ class LoyaltyService:
             ).scalar_one()
             row.remaining -= count
 
-        return await self._post(
+        # What they were worth today, so a later change to point_value cannot
+        # rewrite what the customer was actually given.
+        worth = value_of(points, program.point_value)
+
+        entry = await self._post(
             party_id,
             kind=REDEEMED,
             points=-points,
-            # What they were worth today, so a later change to point_value
-            # cannot rewrite what the customer was actually given.
-            value=value_of(points, program.point_value),
+            value=worth,
             voucher_id=voucher_id,
             voucher_number=voucher_number,
         )
+
+        if voucher_id and worth > ZERO:
+            await self._settle(party_id, voucher_id, worth, on=on)
+
+        return entry
+
+    async def _settle(
+        self, party_id: str, voucher_id: str, worth: Decimal, *, on: date | None
+    ) -> None:
+        """Record the points as a tender against the bill they were spent on.
+
+        Without this the ledger says the customer spent 200 rupees of points
+        and the bill still says they owe 200 rupees. The shopkeeper chases them
+        for money the shop itself already took off, and the customer — who
+        watched the discount appear on the counter screen — argues, correctly.
+
+        It is a payment rather than a discount because the shop really did earn
+        the full amount: the 200 is the cost of the reward scheme, not revenue
+        the shop never made. Recording it as a discount would understate sales
+        by every reward ever given.
+        """
+        from app.services.payment_service import PaymentService
+
+        party = (
+            await self.db.execute(select(Party).where(Party.id == party_id))
+        ).scalar_one_or_none()
+
+        await PaymentService(self.db, self.actor).create_raw(
+            direction=PaymentDirection.IN,
+            amount=worth,
+            party=party,
+            mode=PaymentMode.POINTS,
+            payment_date=on or date.today(),
+            allocations=[{"voucher_id": voucher_id, "amount": worth}],
+            notes="Loyalty points",
+            source="loyalty",
+        )
+
+    async def release_tender(self, voucher_id: str) -> int:
+        """Take the points tender back off a bill that is being cancelled.
+
+        The points themselves go back to the customer, so the settlement they
+        bought has to come off too — otherwise the shop hands back the points
+        and keeps the money they paid for, and the bill reads part-paid by a
+        payment nobody can find.
+
+        Cancelling refuses to run while a bill has payments against it, and
+        rightly so: a real payment is somebody's actual money and the
+        shopkeeper has to decide where it goes. This one is the shop's own
+        machinery, not a decision anyone made, so it clears itself.
+        """
+        from app.models.payment import Payment
+
+        rows = (
+            await self.db.execute(
+                select(Payment).where(
+                    Payment.business_id == self.business_id,
+                    Payment.mode == PaymentMode.POINTS,
+                    Payment.is_deleted.is_(False),
+                    Payment.id.in_(
+                        select(PaymentAllocation.payment_id).where(
+                            PaymentAllocation.voucher_id == voucher_id
+                        )
+                    ),
+                )
+            )
+        ).scalars().all()
+
+        if not rows:
+            return 0
+
+        from app.services.payment_service import PaymentService
+
+        payments = PaymentService(self.db, self.actor)
+        for row in rows:
+            await payments.delete(row.id)
+        return len(rows)
 
     async def reverse(self, voucher_id: str) -> int:
         """Undo everything a cancelled bill did to a customer's points.

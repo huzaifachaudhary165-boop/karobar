@@ -100,6 +100,9 @@ class PaymentMode(StrEnum):
     NEFT = "neft"
     EASYPAISA = "easypaisa"
     JAZZCASH = "jazzcash"
+    # Loyalty points settling part of a bill. A tender, not money: it clears
+    # what the customer owes without anything arriving in a drawer or a bank.
+    POINTS = "points"
     OTHER = "other"
 
 

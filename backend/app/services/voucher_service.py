@@ -242,6 +242,19 @@ class VoucherService(BaseService[Voucher]):
         voucher = await self.get_or_404(voucher_id)
         if voucher.status == VoucherStatus.CANCELLED:
             return voucher
+
+        from app.services.loyalty_service import LoyaltyService  # avoids a cycle
+
+        loyalty = LoyaltyService(self.db, self.actor)
+
+        # Before the check below, not after: points the shop itself put on the
+        # bill are not a payment the shopkeeper has to make a decision about,
+        # and refusing to cancel until they "delete the payment" asks them to
+        # go looking for something they never made.
+        # Clearing an allocation writes paid_amount straight onto this same
+        # voucher object, so the check below already sees the new figure.
+        await loyalty.release_tender(voucher.id)
+
         if voucher.paid_amount > 0:
             raise BusinessRuleError(
                 "This invoice has payments against it. Delete or reallocate the payments first.",
@@ -252,9 +265,7 @@ class VoucherService(BaseService[Voucher]):
 
         # A cancelled bill that leaves the customer's points as they were is a
         # bill that gave something away for nothing.
-        from app.services.loyalty_service import LoyaltyService  # avoids a cycle
-
-        await LoyaltyService(self.db, self.actor).reverse(voucher.id)
+        await loyalty.reverse(voucher.id)
 
         voucher.status = VoucherStatus.CANCELLED
         voucher.balance_amount = ZERO

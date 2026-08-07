@@ -69,6 +69,40 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
   String _paymentMode = 'cash';
   bool _busy = false;
 
+  /// What this customer's points could take off, if the shop runs a scheme.
+  ///
+  /// Fetched rather than assumed, and only shown when there is actually
+  /// something to offer: a points row reading "0 available" on every bill is
+  /// noise a shopkeeper learns to look past, and then misses the day it says
+  /// something.
+  LoyaltyQuote? _points;
+  int _pointsToUse = 0;
+
+  /// What the chosen points take off this bill, in rupees.
+  num get _pointsValue =>
+      _points == null ? 0 : _pointsToUse * _points!.pointValue;
+
+  /// What the customer actually hands over. The bill is still worth [_total] —
+  /// points are a tender, not a discount — but nobody at the counter should
+  /// have to do this subtraction in their head.
+  num get _payable {
+    final left = _total - _pointsValue;
+    return left < 0 ? 0 : left;
+  }
+
+  /// Points can never cover more than the bill in front of them.
+  ///
+  /// The server quoted against a bill that has since changed, and re-asking on
+  /// every keystroke would put the counter on the network. The server checks
+  /// this again on redemption; this only stops the screen offering something
+  /// it already knows is too much.
+  void _clampPoints() {
+    final quote = _points;
+    if (quote == null || _pointsToUse == 0 || quote.pointValue <= 0) return;
+    final affordable = (_total / quote.pointValue).floor();
+    if (_pointsToUse > affordable) _pointsToUse = affordable < 0 ? 0 : affordable;
+  }
+
   DocumentType get _doc => DocumentType.of(widget.voucherType);
 
   bool get _isPurchase => _doc.isPurchase;
@@ -140,10 +174,44 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
       builder: (_) => _PartyPicker(isSupplier: _isPurchase),
     );
     if (party != null) {
-      setState(() => _party = party);
+      setState(() {
+        _party = party;
+        // A different customer holds different points, so what the last one
+        // could have used must not linger on this bill.
+        _points = null;
+        _pointsToUse = 0;
+      });
       // Their price list may put every line on a different rate, so re-quote
       // the whole bill rather than leaving the first few at retail.
       await _requote();
+      await _refreshPoints();
+    }
+  }
+
+  /// Asks what this customer's points could take off this bill.
+  ///
+  /// Only for sales, and only once there is a total: points come off what is
+  /// owed, and a bill with no lines has nothing to take them off.
+  Future<void> _refreshPoints() async {
+    if (_isPurchase || _party == null || _total <= 0) {
+      if (_points != null) setState(() => _points = null);
+      return;
+    }
+
+    try {
+      final quote = await ref
+          .read(loyaltyRepositoryProvider)
+          .quote(_party!.id, _total);
+      if (!mounted) return;
+      setState(() {
+        _points = quote.hasSomethingToOffer ? quote : null;
+        // Never more than this bill now allows: a shorter bill cannot carry
+        // the points a longer one could.
+        if (_pointsToUse > (quote.redeemable)) _pointsToUse = quote.redeemable;
+      });
+    } catch (_) {
+      // Points are a bonus on top of billing, not a precondition for it.
+      if (mounted) setState(() => _points = null);
     }
   }
 
@@ -193,6 +261,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
     if (item != null) {
       _addItem(item);
       await _requote();
+      await _refreshPoints();
     }
   }
 
@@ -212,6 +281,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
         if (!mounted) return;
         _addItem(item);
         await _requote();
+        await _refreshPoints();
       } on ApiException catch (error) {
         if (!mounted) return;
         showError(
@@ -296,6 +366,26 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
       }
 
       final voucher = result.value!;
+
+      // Points are spent against the saved bill, not before it exists: a
+      // redemption recorded against a bill that then failed to save would take
+      // a customer's points and give them nothing.
+      if (_pointsToUse > 0 && _party != null) {
+        try {
+          await ref.read(loyaltyRepositoryProvider).redeem(
+                partyId: _party!.id,
+                points: _pointsToUse,
+                billTotal: voucher.total,
+                voucherId: voucher.id,
+              );
+        } catch (error) {
+          // The bill is real and saved. Losing the redemption is recoverable
+          // by hand; pretending the bill failed is not.
+          if (mounted) showError(context, error);
+        }
+      }
+
+      if (!mounted) return;
       showSuccess(context, '${voucher.number} created.');
       context.pushReplacementNamed(
         Routes.invoiceDetail,
@@ -450,8 +540,14 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                       child: _LineCard(
                         line: _lines[index],
                         symbol: symbol,
-                        onChanged: () => setState(() {}),
-                        onRemove: () => setState(() => _lines.removeAt(index)),
+                        onChanged: () => setState(_clampPoints),
+                        onRemove: () {
+                          setState(() {
+                            _lines.removeAt(index);
+                            _clampPoints();
+                          });
+                          _refreshPoints();
+                        },
                       ),
                     ),
                   ),
@@ -475,8 +571,26 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                           label: 'Total',
                           value: _total,
                           symbol: symbol,
-                          emphasise: true,
+                          emphasise: _pointsValue == 0,
                         ),
+                        // The bill is still worth its total — points are a
+                        // tender, not a discount — but what the customer hands
+                        // over is the smaller figure, so that is the one shown
+                        // in bold.
+                        if (_pointsValue > 0) ...[
+                          _TotalRow(
+                            label: 'Points',
+                            value: -_pointsValue,
+                            symbol: symbol,
+                          ),
+                          const Divider(height: 20),
+                          _TotalRow(
+                            label: 'To pay',
+                            value: _payable,
+                            symbol: symbol,
+                            emphasise: true,
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -484,6 +598,19 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                   // order or a challan — the money arrives with the invoice it
                   // becomes — and offering the field invites an entry that has
                   // nowhere to go.
+                  // Only when the customer actually has points worth using on
+                  // this bill. A row reading "0 available" on every other bill
+                  // is noise a shopkeeper learns to look past.
+                  if (_points != null) ...[
+                    const SizedBox(height: 14),
+                    _PointsCard(
+                      quote: _points!,
+                      using: _pointsToUse,
+                      symbol: symbol,
+                      onChanged: (value) => setState(() => _pointsToUse = value),
+                    ),
+                  ],
+
                   if (_doc.takesPayment) ...[
                     const SizedBox(height: 14),
                     AppCard(
@@ -509,8 +636,12 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                               ),
                               const SizedBox(width: 10),
                               TextButton(
+                                // What is left after points, not the bill's
+                                // total: "Full" means the customer owes
+                                // nothing more, and points have already paid
+                                // their part of it.
                                 onPressed: () => setState(
-                                  () => _paidAmount.text = _total.toStringAsFixed(0),
+                                  () => _paidAmount.text = _payable.toStringAsFixed(0),
                                 ),
                                 child: Text(context.t('Full')),
                               ),
@@ -589,6 +720,91 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// What the customer's points could take off this bill.
+///
+/// A slider rather than a number field: the shopkeeper is deciding how much of
+/// a discount to allow, not entering a figure they already know, and the two
+/// ends — none, and all of it — are the answers they pick most.
+class _PointsCard extends StatelessWidget {
+  const _PointsCard({
+    required this.quote,
+    required this.using,
+    required this.symbol,
+    required this.onChanged,
+  });
+
+  final LoyaltyQuote quote;
+  final int using;
+  final String symbol;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final worth = using * quote.pointValue;
+
+    return AppCard(
+      borderColor: using > 0 ? AppColors.success.withValues(alpha: 0.5) : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.card_giftcard_outlined,
+                  size: 18, color: AppColors.success),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  context.t('${quote.balance} points available'),
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+              if (using > 0)
+                Text(
+                  '-${Fmt.money(worth, symbol: symbol, decimals: false)}',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.success,
+                  ),
+                ),
+            ],
+          ),
+          Slider(
+            value: using.toDouble(),
+            max: quote.redeemable.toDouble(),
+            divisions: quote.redeemable > 0 ? quote.redeemable : null,
+            label: '$using',
+            onChanged: (value) => onChanged(value.round()),
+          ),
+          Row(
+            children: [
+              TextButton(
+                onPressed: using == 0 ? null : () => onChanged(0),
+                child: Text(context.t('None')),
+              ),
+              const Spacer(),
+              Text(
+                context.t('Up to ${quote.redeemable} on this bill'),
+                style: theme.textTheme.labelSmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: using == quote.redeemable
+                    ? null
+                    : () => onChanged(quote.redeemable),
+                child: Text(context.t('Use all')),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

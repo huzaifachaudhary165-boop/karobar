@@ -298,6 +298,138 @@ async def test_cancelling_a_bill_that_used_points_gives_them_back(shop):
     assert await _balance(shop) == 100
 
 
+# ── points as a tender ─────────────────────────────────────────────
+# A customer who watches 200 rupees of points come off at the counter has paid
+# 200 rupees of that bill. If the bill still says they owe it, the shopkeeper
+# chases them for money the shop itself took off, and the customer argues —
+# correctly. So points settle the bill they were spent on.
+@pytest.mark.asyncio
+async def test_points_pay_down_the_bill_they_were_spent_on(shop):
+    client = shop["client"]
+    await _scheme(client)
+    await _sale(shop, amount=20000)          # earns 200
+
+    bill = await _sale(shop, amount=5000)
+    await client.post(
+        "/loyalty/redeem",
+        json={
+            "party_id": shop["customer"]["id"],
+            "points": 150,
+            "bill_total": 5000,
+            "voucher_id": bill["id"],
+        },
+    )
+
+    response = await client.get(f"/vouchers/{bill['id']}")
+    after = response.json()
+    assert Decimal(after["paid_amount"]) == Decimal("150")
+    assert Decimal(after["balance_amount"]) == Decimal("4850")
+
+
+@pytest.mark.asyncio
+async def test_the_bill_still_counts_as_a_full_sale(shop):
+    """The 150 is what the reward scheme cost, not revenue the shop never made.
+
+    Recorded as a discount it would quietly shrink every sales figure the shop
+    has by the value of every reward it has ever given.
+    """
+    client = shop["client"]
+    await _scheme(client)
+    await _sale(shop, amount=20000)
+
+    bill = await _sale(shop, amount=5000)
+    await client.post(
+        "/loyalty/redeem",
+        json={
+            "party_id": shop["customer"]["id"],
+            "points": 150,
+            "bill_total": 5000,
+            "voucher_id": bill["id"],
+        },
+    )
+
+    after = (await client.get(f"/vouchers/{bill['id']}")).json()
+    assert Decimal(after["total"]) == Decimal("5000")
+
+
+@pytest.mark.asyncio
+async def test_points_do_not_put_money_in_the_bank(shop):
+    """No cash arrived and nothing hit the account. Points are a tender, not a
+    payment — defaulting them into the bank the way every other mode does would
+    inflate the balance by every reward the shop has ever handed out."""
+    client = shop["client"]
+    await _scheme(client)
+    await _sale(shop, amount=20000)
+
+    before = (await client.get("/payments/accounts")).json()
+    bill = await _sale(shop, amount=5000)
+    await client.post(
+        "/loyalty/redeem",
+        json={
+            "party_id": shop["customer"]["id"],
+            "points": 150,
+            "bill_total": 5000,
+            "voucher_id": bill["id"],
+        },
+    )
+    after = (await client.get("/payments/accounts")).json()
+
+    def totals(rows):
+        return sorted((row["id"], Decimal(row["balance"])) for row in rows)
+
+    assert totals(after) == totals(before)
+
+
+@pytest.mark.asyncio
+async def test_redeeming_without_a_bill_settles_nothing(shop):
+    """Points given back over the counter with no bill in front of them have no
+    invoice to pay down, and inventing one would be a payment against nothing."""
+    client = shop["client"]
+    await _scheme(client)
+    await _sale(shop, amount=20000)
+
+    response = await client.post(
+        "/loyalty/redeem",
+        json={"party_id": shop["customer"]["id"], "points": 50, "bill_total": 5000},
+    )
+    assert response.status_code in (200, 201), response.text
+
+    payments = (await client.get("/payments")).json()
+    rows = payments["items"] if isinstance(payments, dict) else payments
+    assert not [row for row in rows if row["mode"] == "points"]
+
+
+@pytest.mark.asyncio
+async def test_cancelling_takes_the_points_tender_back_off_the_bill(shop):
+    """Cancelling refuses to run while a bill has payments against it, and
+    rightly so — a real payment is somebody's money and the shopkeeper has to
+    decide where it goes. This one is the shop's own machinery, so it clears
+    itself rather than sending them looking for a payment they never made."""
+    client = shop["client"]
+    await _scheme(client)
+    await _sale(shop, amount=20000)
+
+    bill = await _sale(shop, amount=5000)
+    await client.post(
+        "/loyalty/redeem",
+        json={
+            "party_id": shop["customer"]["id"],
+            "points": 150,
+            "bill_total": 5000,
+            "voucher_id": bill["id"],
+        },
+    )
+
+    response = await client.post(
+        f"/vouchers/{bill['id']}/cancel", json={"reason": "Returned"}
+    )
+    assert response.status_code == 200, response.text
+
+    after = (await client.get(f"/vouchers/{bill['id']}")).json()
+    assert after["status"] == "cancelled"
+    assert Decimal(after["paid_amount"]) == Decimal("0")
+
+
 # ── corrections ────────────────────────────────────────────────────
 @pytest.mark.asyncio
 async def test_points_can_be_given_by_hand_with_a_reason(shop):
