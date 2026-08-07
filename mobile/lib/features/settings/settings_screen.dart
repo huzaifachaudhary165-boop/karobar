@@ -204,6 +204,14 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                   const Divider(height: 1),
                   ListTile(
+                    leading: const Icon(Icons.sell_outlined),
+                    title: Text(context.t('Rates & offers')),
+                    subtitle: const Text('Wholesale prices and running discounts'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.goNamed(Routes.pricing),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
                     leading: const Icon(Icons.palette_outlined),
                     title: Text(context.t('Invoice look')),
                     subtitle: const Text('How your bills print — 26 to choose from'),

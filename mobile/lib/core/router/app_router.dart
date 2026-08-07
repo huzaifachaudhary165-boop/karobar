@@ -24,6 +24,7 @@ import '../../features/parties/party_form_screen.dart';
 import '../../features/payments/payments_screen.dart';
 import '../../features/reports/reports_screen.dart';
 import '../../features/settings/business_settings_screen.dart';
+import '../../features/pricing/pricing_screen.dart';
 import '../../features/settings/data_screen.dart';
 import '../../features/settings/invoice_theme_screen.dart';
 import '../../features/settings/settings_screen.dart';
@@ -65,6 +66,7 @@ abstract final class Routes {
   static const expiry = 'expiry';
   static const labels = 'labels';
   static const invoiceTheme = 'invoice-theme';
+  static const pricing = 'pricing';
   static const accounts = 'accounts';
   static const cheques = 'cheques';
   static const loans = 'loans';
@@ -264,6 +266,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: 'stock/labels',
             name: Routes.labels,
             builder: (_, __) => const LabelsScreen(),
+          ),
+          GoRoute(
+            path: 'pricing',
+            name: Routes.pricing,
+            builder: (_, __) => const PricingScreen(),
           ),
           GoRoute(
             path: 'accounts',

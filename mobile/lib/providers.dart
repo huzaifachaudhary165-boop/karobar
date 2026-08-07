@@ -563,6 +563,20 @@ final labelSizesProvider = FutureProvider<List<LabelSize>>((ref) {
   return ref.watch(stockRepositoryProvider).labelSizes();
 });
 
+// ── rates and offers ─────────────────────────────────────────────
+final priceListsProvider = FutureProvider.autoDispose<List<PriceList>>((ref) {
+  return ref.watch(pricingRepositoryProvider).lists();
+});
+
+final priceEntriesProvider =
+    FutureProvider.autoDispose.family<List<PriceEntry>, String>((ref, listId) {
+  return ref.watch(pricingRepositoryProvider).entries(listId);
+});
+
+final schemesProvider = FutureProvider.autoDispose<List<DiscountScheme>>((ref) {
+  return ref.watch(pricingRepositoryProvider).schemes();
+});
+
 /// The looks an invoice can print in. Also fixed, also cached.
 final invoiceThemesProvider = FutureProvider<List<InvoiceTheme>>((ref) {
   return ref.watch(businessRepositoryProvider).invoiceThemes();
