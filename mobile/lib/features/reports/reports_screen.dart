@@ -7,6 +7,7 @@ import '../../core/utils/formatters.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
 import '../../providers.dart';
+import 'report_catalogue_screen.dart';
 
 /// Reports plus AI-written insights over the same figures.
 class ReportsScreen extends ConsumerStatefulWidget {
@@ -43,6 +44,13 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
       appBar: AppBar(
         title: Text(context.t('Reports')),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.list_alt_outlined),
+            tooltip: context.t('All reports'),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const ReportCatalogueScreen()),
+            ),
+          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.calendar_month_outlined),
             onSelected: (value) {

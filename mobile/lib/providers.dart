@@ -72,6 +72,8 @@ final pricingRepositoryProvider =
     Provider((ref) => PricingRepository(ref.watch(apiClientProvider)));
 final recurringRepositoryProvider =
     Provider((ref) => RecurringRepository(ref.watch(apiClientProvider)));
+final reportCatalogueRepositoryProvider =
+    Provider((ref) => ReportCatalogueRepository(ref.watch(apiClientProvider)));
 final taxRepositoryProvider =
     Provider((ref) => TaxRepository(ref.watch(apiClientProvider)));
 final loyaltyRepositoryProvider =
@@ -569,6 +571,17 @@ final expiringBatchesProvider =
 /// The sticker sheets and rolls a shop can buy. Fixed data, so it is cached.
 final labelSizesProvider = FutureProvider<List<LabelSize>>((ref) {
   return ref.watch(stockRepositoryProvider).labelSizes();
+});
+
+/// The list of reports. Fixed data, so it is cached for the session.
+final reportCatalogueProvider = FutureProvider<List<ReportGroup>>((ref) {
+  return ref.watch(reportCatalogueRepositoryProvider).catalogue();
+});
+
+/// One report's data, keyed on the endpoint the catalogue named.
+final reportDataProvider =
+    FutureProvider.autoDispose.family<Map<String, dynamic>, String>((ref, endpoint) {
+  return ref.watch(reportCatalogueRepositoryProvider).fetch(endpoint);
 });
 
 // ── tax, loyalty, manufacturing ──────────────────────────────────

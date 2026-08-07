@@ -204,12 +204,77 @@ async def balances(
     }
 
 
+# Where each report's data actually comes from.
+#
+# A report either has a screen of its own already, or is a table a generic
+# viewer can render from an endpoint. Keeping the mapping here rather than in
+# the app means adding a report does not need an app release, and the app never
+# has to guess a URL from a key.
+_SCREENS = {
+    "expiry": "expiry",
+    "low-stock": "items?filter=low_stock",
+    "cheques": "cheques",
+    "loans": "loans",
+    "accounts": "accounts",
+    "godown-stock": "godowns",
+    "price-lists": "pricing",
+    "offers": "pricing",
+    "loyalty": "loyalty",
+    "recurring": "recurring",
+    "production": "manufacturing",
+    "fbr-return": "tax",
+    "annexure-c": "tax",
+    "batches": "expiry",
+    "serials": "items",
+    "item-ledger": "items",
+    "party-statement": "parties",
+}
+
+_ENDPOINTS = {
+    "dead-stock": "/reports/dead-stock",
+    "stock-ageing": "/reports/stock-ageing",
+    "item-profit": "/reports/item-profit",
+    "party-profit": "/reports/party-profit",
+    "discounts": "/reports/discounts",
+    "payment-modes": "/reports/payment-modes",
+    "purchase-register": "/reports/purchase-register",
+    "returns": "/reports/returns",
+    "expense-trend": "/reports/expense-trend",
+    "by-user": "/reports/by-user",
+    "stock-movement": "/reports/stock-movement",
+    "balances": "/reports/balances",
+    "profit-loss": "/reports/profit-loss",
+    "balance-sheet": "/reports/balance-sheet",
+    "cash-flow": "/reports/cash-flow",
+    "daybook": "/reports/daybook",
+    "sales": "/reports/sales",
+    "top-items": "/reports/top-items",
+    "top-parties": "/reports/top-parties",
+    "ageing": "/reports/ageing",
+    "tax": "/reports/tax",
+}
+
+
+def _decorate(catalogue: dict[str, Any]) -> dict[str, Any]:
+    """Attach the route or endpoint each report is served by."""
+    for group in catalogue["groups"]:
+        for report in group["reports"]:
+            report["screen"] = _SCREENS.get(report["key"])
+            report["endpoint"] = _ENDPOINTS.get(report["key"])
+    return catalogue
+
+
 @router.get("/catalogue", summary="Every report this app can produce")
 async def catalogue(tenant: Tenant) -> dict[str, Any]:
     """Listed so the reports screen is built from one place rather than from a
-    hard-coded menu that drifts out of step with what exists."""
+    hard-coded menu that drifts out of step with what exists.
+
+    Each entry says where its own data comes from — either a screen the app
+    already has, or an endpoint a generic viewer can render. The app therefore
+    never has to guess, and a report added here appears without an app release.
+    """
     tenant.require(Perm.REPORT_READ)
-    return {
+    return _decorate({
         "groups": [
             {
                 "title": "Money",
@@ -328,4 +393,4 @@ async def catalogue(tenant: Tenant) -> dict[str, Any]:
                 ],
             },
         ]
-    }
+    })

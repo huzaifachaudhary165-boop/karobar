@@ -1159,6 +1159,49 @@ class SerialAddResult {
       );
 }
 
+// ── the report catalogue ─────────────────────────────────────────
+/// One report the app can produce.
+///
+/// Carries where its data comes from so the app never has to guess: either a
+/// screen it already has, or an endpoint the generic viewer can render.
+class ReportEntry {
+  const ReportEntry({
+    required this.key,
+    required this.name,
+    required this.about,
+    this.screen,
+    this.endpoint,
+  });
+
+  final String key;
+  final String name;
+  final String about;
+  final String? screen;
+  final String? endpoint;
+
+  bool get isReachable => screen != null || endpoint != null;
+
+  factory ReportEntry.fromJson(Map<String, dynamic> json) => ReportEntry(
+        key: _str(json['key']),
+        name: _str(json['name']),
+        about: _str(json['about']),
+        screen: json['screen'] as String?,
+        endpoint: json['endpoint'] as String?,
+      );
+}
+
+class ReportGroup {
+  const ReportGroup({required this.title, this.reports = const []});
+
+  final String title;
+  final List<ReportEntry> reports;
+
+  factory ReportGroup.fromJson(Map<String, dynamic> json) => ReportGroup(
+        title: _str(json['title']),
+        reports: _maps(json['reports']).map(ReportEntry.fromJson).toList(),
+      );
+}
+
 // ── Pakistani sales tax ──────────────────────────────────────────
 /// What a shop owes for the month, and what it is built from.
 class TaxReturn {

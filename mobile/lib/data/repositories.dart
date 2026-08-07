@@ -881,6 +881,27 @@ class RecurringRepository {
   }
 }
 
+/// Every report the app can produce, and their data.
+class ReportCatalogueRepository {
+  ReportCatalogueRepository(this._api);
+
+  final ApiClient _api;
+
+  Future<List<ReportGroup>> catalogue() async {
+    final data = await _api.get('/reports/catalogue');
+    return _parseList((data as Map)['groups'], ReportGroup.fromJson);
+  }
+
+  /// Fetches whatever a catalogue entry points at.
+  ///
+  /// Deliberately untyped: the viewer renders whatever shape comes back, so a
+  /// report added on the server needs no matching model here.
+  Future<Map<String, dynamic>> fetch(String endpoint) async {
+    final data = await _api.get(endpoint, cache: false);
+    return Map<String, dynamic>.from(data as Map);
+  }
+}
+
 /// Pakistani sales tax.
 class TaxRepository {
   TaxRepository(this._api);
