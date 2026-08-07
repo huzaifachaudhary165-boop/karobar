@@ -6,7 +6,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.api.deps import DbSession, Tenant
 from app.core.errors import NotFoundError
@@ -14,9 +14,10 @@ from app.core.pagination import PageParams, page_params
 from app.core.permissions import Perm
 from app.schemas.common import Message, Paginated
 from app.schemas.item import (
-    BatchAllocation, BatchCreate, BatchOut, BatchUpdate, CategoryCreate, CategoryOut, ExpiringBatch,
-    GodownCreate, GodownOut, GodownStockRow, GodownUpdate, ItemCreate, ItemGodownRow,
-    ItemListItem, ItemOut, ItemUpdate, SerialAdd, SerialAddResult, SerialLookupOut, SerialOut,
+    BarcodeSuggestion, BatchAllocation, BatchCreate, BatchOut, BatchUpdate, CategoryCreate,
+    CategoryOut, ExpiringBatch, GodownCreate, GodownOut, GodownStockRow, GodownUpdate,
+    ItemCreate, ItemGodownRow, ItemListItem, ItemOut, ItemUpdate, LabelSheetRequest,
+    LabelSizeOut, SerialAdd, SerialAddResult, SerialLookupOut, SerialOut,
     StockAdjustment, StockLedgerOut, StockSummary, StockTransfer, TransferResult,
     UnitCreate, UnitOut,
 )
@@ -24,6 +25,7 @@ from app.services.item_service import (
     BatchService, CategoryService, GodownService, ItemService, SerialService, StockService,
     UnitService,
 )
+from app.services.label_service import LABEL_SIZES, LabelService
 
 router = APIRouter(prefix="/items", tags=["items"])
 
@@ -171,6 +173,62 @@ async def create_unit(payload: UnitCreate, tenant: Tenant, db: DbSession) -> Uni
     tenant.require(Perm.ITEM_WRITE)
     row = await UnitService(db, tenant.actor).create(payload.model_dump(exclude_unset=True))
     return UnitOut.model_validate(row)
+
+
+# ── barcode labels ─────────────────────────────────────────────────
+@router.get("/labels/sizes", response_model=list[LabelSizeOut], summary="Label stock sizes")
+async def label_sizes(tenant: Tenant) -> list[LabelSizeOut]:
+    """The sticker sheets and rolls a shop can buy, by the names on the box."""
+    tenant.require(Perm.ITEM_READ)
+    return [
+        LabelSizeOut(
+            key=size.key, name=size.name,
+            label_width_mm=size.label_width_mm, label_height_mm=size.label_height_mm,
+            columns=size.columns, rows=size.rows,
+            per_sheet=size.per_sheet, is_roll=size.is_roll,
+        )
+        for size in LABEL_SIZES.values()
+    ]
+
+
+@router.post("/labels", response_class=Response, summary="Print-ready sheet of labels")
+async def label_sheet(payload: LabelSheetRequest, tenant: Tenant, db: DbSession) -> Response:
+    tenant.require(Perm.ITEM_READ)
+    html = await LabelService(db, tenant.actor).render(
+        [{"item_id": row.item_id, "qty": row.qty} for row in payload.items],
+        size_key=payload.size,
+        show_name=payload.show_name,
+        show_price=payload.show_price,
+        show_mrp=payload.show_mrp,
+        show_code=payload.show_code,
+        show_shop=payload.show_shop,
+        start_at=payload.start_at,
+    )
+    return Response(content=html, media_type="text/html")
+
+
+@router.post("/labels/assign-barcode", response_model=BarcodeSuggestion,
+             summary="Give an item a barcode of its own")
+async def assign_barcode(
+    tenant: Tenant,
+    db: DbSession,
+    item_id: str = Query(description="The item to give a code to"),
+) -> BarcodeSuggestion:
+    """Mints an in-store EAN-13 for goods that arrived without one.
+
+    Loose rice, home-made sweets, anything repacked — none of it carries a
+    manufacturer's code, and a shop cannot scan what has no barcode. The 200
+    range is reserved for exactly this and can never collide with a real
+    product's code.
+    """
+    tenant.require(Perm.ITEM_WRITE)
+    service = ItemService(db, tenant.actor)
+    item = await service.get_or_404(item_id)
+    if item.barcode:
+        return BarcodeSuggestion(barcode=item.barcode, symbology="existing")
+
+    code = await service.mint_barcode(item)
+    return BarcodeSuggestion(barcode=code, symbology="ean13")
 
 
 # ── locations ──────────────────────────────────────────────────────

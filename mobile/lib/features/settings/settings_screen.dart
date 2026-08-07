@@ -196,6 +196,14 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                   const Divider(height: 1),
                   ListTile(
+                    leading: const Icon(Icons.qr_code_2_outlined),
+                    title: Text(context.t('Barcode labels')),
+                    subtitle: const Text('Print stickers for shelves and packets'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.goNamed(Routes.labels),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
                     leading: const Icon(Icons.notifications_outlined),
                     title: Text(context.t('Alerts')),
                     subtitle: const Text('Overdue bills and low stock'),

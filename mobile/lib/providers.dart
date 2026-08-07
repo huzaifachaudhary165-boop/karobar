@@ -556,6 +556,11 @@ final expiringBatchesProvider =
   return ref.watch(stockRepositoryProvider).expiring(withinDays: days);
 });
 
+/// The sticker sheets and rolls a shop can buy. Fixed data, so it is cached.
+final labelSizesProvider = FutureProvider<List<LabelSize>>((ref) {
+  return ref.watch(stockRepositoryProvider).labelSizes();
+});
+
 final itemSerialsProvider =
     FutureProvider.autoDispose.family<List<ItemSerial>, String>((ref, itemId) {
   return ref.watch(stockRepositoryProvider).serials(itemId);

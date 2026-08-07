@@ -1159,6 +1159,40 @@ class SerialAddResult {
       );
 }
 
+/// A sticker sheet or roll, named the way a shop buys it.
+class LabelSize {
+  const LabelSize({
+    required this.key,
+    required this.name,
+    this.labelWidthMm = 38,
+    this.labelHeightMm = 21,
+    this.columns = 5,
+    this.rows = 13,
+    this.perSheet = 65,
+    this.isRoll = false,
+  });
+
+  final String key;
+  final String name;
+  final double labelWidthMm;
+  final double labelHeightMm;
+  final int columns;
+  final int rows;
+  final int perSheet;
+  final bool isRoll;
+
+  factory LabelSize.fromJson(Map<String, dynamic> json) => LabelSize(
+        key: _str(json['key']),
+        name: _str(json['name']),
+        labelWidthMm: _num(json['label_width_mm']).toDouble(),
+        labelHeightMm: _num(json['label_height_mm']).toDouble(),
+        columns: _num(json['columns']).toInt(),
+        rows: _num(json['rows']).toInt(),
+        perSheet: _num(json['per_sheet']).toInt(),
+        isRoll: _bool(json['is_roll']),
+      );
+}
+
 // ── money ────────────────────────────────────────────────────────
 /// A cash drawer, bank account or mobile wallet.
 class BankAccount {

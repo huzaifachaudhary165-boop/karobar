@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.barcodes import next_ean13
 from app.core.errors import BusinessRuleError, ConflictError, NotFoundError
 from app.core.money import ZERO, D, money, qty, safe_div
 from app.core.pagination import PageParams, paginate
@@ -254,6 +255,52 @@ class ItemService(BaseService[Item]):
                     .limit(limit)
                 )
             ).scalars().all()
+        )
+
+    async def mint_barcode(self, item: Item, prefix: str = "200") -> str:
+        """Give an item an in-store barcode and save it.
+
+        Loose rice, home-made sweets, anything repacked: none of it arrives with
+        a manufacturer's code, and a counter cannot scan what has no barcode.
+        The 200–299 range exists for exactly this and can never collide with a
+        real product's code.
+
+        The next number comes from the highest already issued rather than from a
+        count, so deleting an item does not hand its barcode to the next one
+        created — two products sharing a code is indistinguishable at the
+        counter and impossible to explain afterwards.
+        """
+        highest = (
+            await self.db.execute(
+                select(func.max(Item.barcode)).where(
+                    Item.business_id == self.business_id,
+                    Item.barcode.isnot(None),
+                    Item.barcode.like(f"{prefix}%"),
+                    func.length(Item.barcode) == 13,
+                )
+            )
+        ).scalar_one_or_none()
+
+        sequence = 1
+        if highest and highest[len(prefix):-1].isdigit():
+            sequence = int(highest[len(prefix):-1]) + 1
+
+        # A code could still be held by an item outside this run, so walk
+        # forward rather than assume the next one is free.
+        for _ in range(1000):
+            candidate = next_ean13(prefix, sequence)
+            if not await self._barcode_taken(candidate):
+                item.barcode = candidate
+                item.bump_revision()
+                await self.track(
+                    "update", item, label=item.name, changes={"barcode": [None, candidate]}
+                )
+                return candidate
+            sequence += 1
+
+        raise BusinessRuleError(
+            "Could not find a free barcode in the in-store range. "
+            "Enter one manually instead."
         )
 
     async def _name_taken(self, name: str) -> bool:

@@ -30,6 +30,7 @@ import '../../features/settings/team_screen.dart';
 import '../../features/shell/home_shell.dart';
 import '../../features/stock/expiry_screen.dart';
 import '../../features/stock/godowns_screen.dart';
+import '../../features/stock/labels_screen.dart';
 import '../../providers.dart';
 
 /// Route names, referenced by every `context.goNamed(...)` call.
@@ -61,6 +62,7 @@ abstract final class Routes {
   static const notifications = 'notifications';
   static const godowns = 'godowns';
   static const expiry = 'expiry';
+  static const labels = 'labels';
   static const accounts = 'accounts';
   static const cheques = 'cheques';
   static const loans = 'loans';
@@ -250,6 +252,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: 'stock/expiry',
             name: Routes.expiry,
             builder: (_, __) => const ExpiryScreen(),
+          ),
+          GoRoute(
+            path: 'stock/labels',
+            name: Routes.labels,
+            builder: (_, __) => const LabelsScreen(),
           ),
           GoRoute(
             path: 'accounts',
@@ -442,6 +449,8 @@ void openDeepLink(BuildContext context, String? deepLink, {WidgetRef? ref}) {
 
     case 'expiry':
       context.goNamed(Routes.expiry);
+    case 'labels' || 'barcodes':
+      context.goNamed(Routes.labels);
     case 'locations' || 'godowns':
       context.goNamed(Routes.godowns);
     case 'accounts':

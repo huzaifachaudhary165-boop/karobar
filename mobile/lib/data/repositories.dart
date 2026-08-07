@@ -614,6 +614,53 @@ class StockRepository {
     final data = await _api.get('/items/serials/lookup/$serialNumber', cache: false);
     return Map<String, dynamic>.from(data as Map);
   }
+
+  // ── barcode labels ─────────────────────────────────────────────
+  Future<List<LabelSize>> labelSizes() async {
+    final data = await _api.get('/items/labels/sizes');
+    return _parseList(data, LabelSize.fromJson);
+  }
+
+  /// The printable sheet, as HTML.
+  ///
+  /// Returned as text rather than a file so the app can hand it straight to the
+  /// system print dialog or a browser — every Android phone can print HTML, and
+  /// not every shop has a label printer paired.
+  Future<String> labelSheet({
+    required List<({String itemId, int qty})> items,
+    required String size,
+    bool showName = true,
+    bool showPrice = true,
+    bool showMrp = false,
+    bool showCode = true,
+    bool showShop = false,
+    int startAt = 1,
+  }) async {
+    final response = await _api.post('/items/labels', body: {
+      'items': [
+        for (final row in items) {'item_id': row.itemId, 'qty': row.qty},
+      ],
+      'size': size,
+      'show_name': showName,
+      'show_price': showPrice,
+      'show_mrp': showMrp,
+      'show_code': showCode,
+      'show_shop': showShop,
+      'start_at': startAt,
+    });
+    // The endpoint answers text/html, so Dio hands back the document itself
+    // rather than a decoded map.
+    return response.toString();
+  }
+
+  /// Mints an in-store barcode for an item that arrived without one.
+  Future<String> assignBarcode(String itemId) async {
+    final data = await _api.post(
+      '/items/labels/assign-barcode',
+      query: {'item_id': itemId},
+    );
+    return (data as Map)['barcode'].toString();
+  }
 }
 
 /// Transfers between own accounts, cheques and loans.

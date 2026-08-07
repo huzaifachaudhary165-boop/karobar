@@ -361,6 +361,45 @@ class SerialLookupOut(ORMModel):
     sku: str | None = None
 
 
+# ── barcode labels ─────────────────────────────────────────────────
+class LabelRequest(InputModel):
+    item_id: str
+    qty: int = Field(1, ge=1, le=1000, description="How many stickers for this item")
+
+
+class LabelSheetRequest(InputModel):
+    items: list[LabelRequest] = Field(min_length=1, max_length=200)
+    size: str = Field("a4_65", max_length=32)
+
+    show_name: bool = True
+    show_price: bool = True
+    show_mrp: bool = False
+    show_code: bool = True
+    show_shop: bool = False
+
+    # Skips positions already peeled off a part-used sheet, so a shop printing
+    # one more label today does not waste yesterday's sticker paper.
+    start_at: int = Field(1, ge=1, le=200)
+
+
+class LabelSizeOut(ORMModel):
+    key: str
+    name: str
+    label_width_mm: float
+    label_height_mm: float
+    columns: int
+    rows: int
+    per_sheet: int
+    is_roll: bool
+
+
+class BarcodeSuggestion(ORMModel):
+    """A code the shop can give an item that has none."""
+
+    barcode: str
+    symbology: str
+
+
 class StockAdjustment(InputModel):
     item_id: str
     qty: QtyField = Field(description="Signed: positive adds stock, negative removes it")
