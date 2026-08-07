@@ -128,6 +128,18 @@ class VoucherService(BaseService[Voucher]):
         if payload.payment and not is_draft and vtype.affects_ledger:
             await self._record_inline_payment(voucher, payload.payment, party)
 
+        # Points are given here rather than by the caller, so a sale raised by
+        # the AI, by a recurring schedule or by an import earns them just the
+        # same as one keyed at the counter. A loyalty scheme a customer only
+        # gets credit for some of the time is worse than none.
+        if not is_draft and vtype == VoucherType.SALE and party is not None:
+            from app.services.loyalty_service import LoyaltyService  # avoids a cycle
+
+            await LoyaltyService(self.db, self.actor).earn(
+                party.id, voucher.total,
+                voucher_id=voucher.id, voucher_number=voucher.number, on=vdate,
+            )
+
         await self.track("create", voucher, label=f"{voucher.voucher_type} {voucher.number}")
         self.log("voucher.created", voucher_id=voucher.id, number=voucher.number, total=str(voucher.total))
         return voucher
@@ -220,6 +232,13 @@ class VoucherService(BaseService[Voucher]):
             )
         await self._reverse_stock(voucher)
         await self._reverse_ledger(voucher)
+
+        # A cancelled bill that leaves the customer's points as they were is a
+        # bill that gave something away for nothing.
+        from app.services.loyalty_service import LoyaltyService  # avoids a cycle
+
+        await LoyaltyService(self.db, self.actor).reverse(voucher.id)
+
         voucher.status = VoucherStatus.CANCELLED
         voucher.balance_amount = ZERO
         voucher.notes = f"{voucher.notes or ''}\n[Cancelled] {reason or ''}".strip()

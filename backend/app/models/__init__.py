@@ -16,6 +16,7 @@ from app.models.item import (
     Godown, GodownStock, Item, ItemBatch, ItemCategory, ItemSerial, StockLedgerEntry, Unit,
 )
 from app.models.party import Party, PartyGroup
+from app.models.loyalty import LoyaltyEntry, LoyaltyProgram
 from app.models.pricing import DiscountScheme, PriceList, PriceListEntry
 from app.models.recurring import RecurringInvoice
 from app.models.payment import Account, Payment, PaymentAllocation
@@ -38,6 +39,7 @@ __all__ = [
     "StockLedgerEntry",
     "TaxRate", "ExpenseCategory", "Account",
     "PriceList", "PriceListEntry", "DiscountScheme",
+    "LoyaltyProgram", "LoyaltyEntry",
     # transactions
     "Voucher", "VoucherLine", "Payment", "PaymentAllocation", "Expense",
     "AccountTransfer", "Loan", "LoanPayment", "RecurringInvoice",
