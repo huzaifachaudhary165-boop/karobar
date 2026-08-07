@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, Response, status
 from sqlalchemy import func, select
 
 from app.api.deps import CurrentUser, DbSession, Tenant
 from app.core.permissions import Perm, Role, assignable_roles, permissions_for
 from app.models.business import Business, BusinessMember
 from app.schemas.business import (
-    BusinessCreate, BusinessOut, BusinessUpdate, MemberInvite, MemberOut, MemberUpdate,
-    SettingsOut, SettingsUpdate,
+    BusinessCreate, BusinessOut, BusinessUpdate, InvoiceThemeOut, MemberInvite, MemberOut,
+    MemberUpdate, SettingsOut, SettingsUpdate,
 )
 from app.schemas.common import Message
 from app.services.business_service import BusinessService
+from app.services.invoice_themes import DEFAULT_THEME, THEMES
+from app.services.pdf_service import PdfService
 
 router = APIRouter(prefix="/businesses", tags=["business"])
 
@@ -92,6 +94,39 @@ async def update_settings(
         tenant.business.id, payload.model_dump(exclude_unset=True)
     )
     return SettingsOut.model_validate(cfg)
+
+
+@router.get("/invoice-themes", response_model=list[InvoiceThemeOut],
+            summary="The looks an invoice can print in")
+async def invoice_themes() -> list[InvoiceThemeOut]:
+    """Fixed data, so no tenant and no permission check — every shop sees the
+    same list, and the picker should load before anything else has."""
+    return [
+        InvoiceThemeOut(
+            key=theme.key, name=theme.name, layout=theme.layout,
+            accent=theme.accent, paper=theme.paper, density=theme.density,
+            is_roll=theme.is_roll,
+        )
+        for theme in THEMES.values()
+    ]
+
+
+@router.get("/current/invoice-preview", response_class=Response,
+            summary="A sample invoice in a chosen look")
+async def invoice_preview(
+    tenant: Tenant,
+    db: DbSession,
+    theme: str = Query(DEFAULT_THEME, max_length=32),
+) -> Response:
+    """Renders a made-up bill so a shop can see a look before committing to it.
+
+    Sample data rather than a real invoice: a shop deciding how its bills
+    should look may not have raised one yet, and a picker that shows nothing
+    until they do is a picker that cannot be used on the day it matters.
+    """
+    tenant.require(Perm.SETTINGS_MANAGE)
+    html = await PdfService(db, tenant.actor).render_sample(theme)
+    return Response(content=html, media_type="text/html")
 
 
 @router.get("/current/permissions", summary="What your role can do here")

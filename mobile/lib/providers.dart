@@ -561,6 +561,11 @@ final labelSizesProvider = FutureProvider<List<LabelSize>>((ref) {
   return ref.watch(stockRepositoryProvider).labelSizes();
 });
 
+/// The looks an invoice can print in. Also fixed, also cached.
+final invoiceThemesProvider = FutureProvider<List<InvoiceTheme>>((ref) {
+  return ref.watch(businessRepositoryProvider).invoiceThemes();
+});
+
 final itemSerialsProvider =
     FutureProvider.autoDispose.family<List<ItemSerial>, String>((ref, itemId) {
   return ref.watch(stockRepositoryProvider).serials(itemId);

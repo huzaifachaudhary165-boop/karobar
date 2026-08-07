@@ -1159,6 +1159,47 @@ class SerialAddResult {
       );
 }
 
+/// One of the looks an invoice can print in.
+class InvoiceTheme {
+  const InvoiceTheme({
+    required this.key,
+    required this.name,
+    this.layout = 'band',
+    this.accent = '#F97316',
+    this.paper = 'A4',
+    this.density = 'regular',
+    this.isRoll = false,
+  });
+
+  final String key;
+  final String name;
+  final String layout;
+  final String accent;
+  final String paper;
+  final String density;
+  final bool isRoll;
+
+  /// The accent as a Flutter colour, falling back to the brand orange.
+  ///
+  /// A malformed hex from an older build must not take the picker down — it is
+  /// a swatch, not a number anything depends on.
+  int get accentValue {
+    final hex = accent.replaceAll('#', '');
+    if (hex.length != 6) return 0xFFF97316;
+    return int.tryParse('FF$hex', radix: 16) ?? 0xFFF97316;
+  }
+
+  factory InvoiceTheme.fromJson(Map<String, dynamic> json) => InvoiceTheme(
+        key: _str(json['key']),
+        name: _str(json['name']),
+        layout: _str(json['layout'], 'band'),
+        accent: _str(json['accent'], '#F97316'),
+        paper: _str(json['paper'], 'A4'),
+        density: _str(json['density'], 'regular'),
+        isRoll: _bool(json['is_roll']),
+      );
+}
+
 /// A sticker sheet or roll, named the way a shop buys it.
 class LabelSize {
   const LabelSize({

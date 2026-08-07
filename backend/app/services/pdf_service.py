@@ -7,6 +7,9 @@ from __future__ import annotations
 
 import base64
 import io
+from datetime import date
+from decimal import Decimal
+from types import SimpleNamespace
 from typing import Any
 
 from jinja2 import Environment, select_autoescape
@@ -20,7 +23,9 @@ from app.models.business import Business, BusinessSettings
 from app.models.payment import Account
 from app.models.voucher import Voucher
 from app.services.base import ActorContext
+from app.services.invoice_templates import TEMPLATES as LEGACY_TEMPLATES
 from app.services.invoice_templates import TEMPLATE_LABELS, get as template_for
+from app.services.invoice_themes import THEME_TEMPLATE, THEMES, get_theme
 
 _env = Environment(autoescape=select_autoescape(["html", "xml"]), trim_blocks=True, lstrip_blocks=True)
 
@@ -216,6 +221,52 @@ INVOICE_TEMPLATE = """
 """
 
 
+class _Sample(SimpleNamespace):
+    """A stand-in voucher for the theme picker.
+
+    A plain namespace rather than an ORM object: the template only ever reads
+    attributes, and building a real Voucher would mean a database row that
+    exists solely to be looked at.
+    """
+
+
+_SAMPLE_VOUCHER = _Sample(
+    number="INV-2026-27/0042",
+    voucher_date=date(2026, 8, 7),
+    due_date=date(2026, 8, 21),
+    voucher_type="sale",
+    party_name="Ahmed Traders",
+    party_phone="+92 300 1234567",
+    billing_address="Shop 14, Akbari Mandi, Lahore",
+    place_of_supply=None,
+    subtotal=Decimal("18400"),
+    discount_amount=Decimal("400"),
+    tax_amount=Decimal("3060"),
+    cgst_amount=Decimal("0"),
+    sgst_amount=Decimal("0"),
+    igst_amount=Decimal("0"),
+    shipping_charge=Decimal("250"),
+    round_off=Decimal("-0.20"),
+    total=Decimal("21310"),
+    paid_amount=Decimal("15000"),
+    balance_amount=Decimal("6310"),
+    lines=[
+        _Sample(item_name="Sugar 50kg Bag", description=None, hsn_code="1701",
+                unit_label="Bag", qty=Decimal("2"), rate=Decimal("7400"),
+                discount_amount=Decimal("0"), tax_rate=Decimal("0"),
+                total=Decimal("14800")),
+        _Sample(item_name="Cooking Oil 5L", description="Dalda, carton of 4",
+                hsn_code="1511", unit_label="Btl", qty=Decimal("4"),
+                rate=Decimal("2750"), discount_amount=Decimal("400"),
+                tax_rate=Decimal("17"), total=Decimal("12402")),
+        _Sample(item_name="Tea Pack 900g", description=None, hsn_code="0902",
+                unit_label="Pkt", qty=Decimal("3"), rate=Decimal("1850"),
+                discount_amount=Decimal("0"), tax_rate=Decimal("17"),
+                total=Decimal("6493.50")),
+    ],
+)
+
+
 class PdfService:
     def __init__(self, db: AsyncSession, actor: ActorContext) -> None:
         self.db = db
@@ -232,15 +283,26 @@ class PdfService:
             str(int(v)) if v is not None and v == int(v) else f"{v:.2f}"
         )
 
-        # `invoice_template` is a free-text setting, so an unknown value must
-        # fall back rather than stop the bill printing.
-        template = template_for(cfg.invoice_template)
+        # `invoice_template` is free text, so an unknown value must fall back
+        # rather than stop the bill printing. The four original layouts are
+        # hand-written and still resolve by name; everything else is a theme.
+        chosen = (cfg.invoice_template or "").lower().strip()
+        theme = get_theme(chosen, accent=business.theme_color)
+        template = (
+            template_for(chosen) if chosen in LEGACY_TEMPLATES else THEME_TEMPLATE
+        )
 
         return env.from_string(template).render(
             v=voucher,
             biz=business,
+            t=theme,
             theme=business.theme_color or "#F97316",
             doc_title=DOC_TITLES.get(voucher.voucher_type, voucher.voucher_type.upper()),
+            party_label=(
+                "Supplier"
+                if voucher.voucher_type in ("purchase", "purchase_return", "purchase_order")
+                else "Bill to"
+            ),
             tax_label="GSTIN" if business.gstin else "NTN",
             page_size="A5" if cfg.print_size == "A5" else "A4",
             show_hsn=cfg.show_hsn and any(line.hsn_code for line in voucher.lines),
@@ -260,6 +322,55 @@ class PdfService:
             # so the printed breakdown always matches what was actually posted.
             is_interstate=bool(voucher.igst_amount),
             place_of_supply=voucher.place_of_supply,
+        )
+
+    async def render_sample(self, theme_key: str) -> str:
+        """A made-up bill in a chosen look, for the theme picker.
+
+        Deliberately not "the shop's most recent invoice": a shop deciding how
+        its bills should look may not have raised one yet, and a preview that
+        shows nothing until they do cannot be used on the day it matters. The
+        sample carries a discount, a tax and a part payment so every row a real
+        bill can grow is visible in the preview.
+        """
+        business = (
+            await self.db.execute(select(Business).where(Business.id == self.business_id))
+        ).scalar_one_or_none()
+        if business is None:
+            raise NotFoundError("Business not found.")
+
+        symbol = f"{business.currency_symbol} "
+        env = Environment(autoescape=select_autoescape(["html"]), trim_blocks=True,
+                          lstrip_blocks=True)
+        env.filters["money"] = lambda v: format_money(v or 0, symbol=symbol)
+        env.filters["qty"] = lambda v: (
+            str(int(v)) if v is not None and v == int(v) else f"{v:.2f}"
+        )
+
+        theme = get_theme(theme_key, accent=business.theme_color)
+        chosen = (theme_key or "").lower().strip()
+        template = template_for(chosen) if chosen in LEGACY_TEMPLATES else THEME_TEMPLATE
+
+        return env.from_string(template).render(
+            v=_SAMPLE_VOUCHER,
+            biz=business,
+            t=theme,
+            theme=business.theme_color or "#F97316",
+            doc_title="TAX INVOICE",
+            party_label="Bill to",
+            tax_label="GSTIN" if business.gstin else "NTN",
+            page_size=theme.paper,
+            show_hsn=False,
+            has_discount=True,
+            has_tax=True,
+            show_words=True,
+            words=amount_in_words(_SAMPLE_VOUCHER.total),
+            bank=None,
+            qr=None,
+            footer="Thank you for your business.",
+            terms="Goods once sold will not be taken back.",
+            is_interstate=False,
+            place_of_supply=None,
         )
 
     async def render_pdf(self, voucher_id: str) -> bytes | None:

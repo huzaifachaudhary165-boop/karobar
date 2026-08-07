@@ -25,6 +25,7 @@ import '../../features/payments/payments_screen.dart';
 import '../../features/reports/reports_screen.dart';
 import '../../features/settings/business_settings_screen.dart';
 import '../../features/settings/data_screen.dart';
+import '../../features/settings/invoice_theme_screen.dart';
 import '../../features/settings/settings_screen.dart';
 import '../../features/settings/team_screen.dart';
 import '../../features/shell/home_shell.dart';
@@ -63,6 +64,7 @@ abstract final class Routes {
   static const godowns = 'godowns';
   static const expiry = 'expiry';
   static const labels = 'labels';
+  static const invoiceTheme = 'invoice-theme';
   static const accounts = 'accounts';
   static const cheques = 'cheques';
   static const loans = 'loans';
@@ -222,6 +224,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: 'settings/team',
             name: Routes.team,
             builder: (_, __) => const TeamScreen(),
+          ),
+          GoRoute(
+            path: 'settings/invoice-look',
+            name: Routes.invoiceTheme,
+            builder: (_, __) => const InvoiceThemeScreen(),
           ),
           GoRoute(
             path: 'settings/data',

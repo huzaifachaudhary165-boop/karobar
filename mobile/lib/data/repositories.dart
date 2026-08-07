@@ -874,6 +874,22 @@ class BusinessRepository {
   Future<Map<String, dynamic>> settings() async =>
       Map<String, dynamic>.from(await _api.get('/businesses/current/settings') as Map);
 
+  /// The looks an invoice can print in. Fixed data, so it is cached.
+  Future<List<InvoiceTheme>> invoiceThemes() async {
+    final data = await _api.get('/businesses/invoice-themes');
+    return _parseList(data, InvoiceTheme.fromJson);
+  }
+
+  /// A sample bill rendered in one look, for the picker.
+  Future<String> invoicePreview(String themeKey) async {
+    final data = await _api.get(
+      '/businesses/current/invoice-preview',
+      cache: false,
+      query: {'theme': themeKey},
+    );
+    return data.toString();
+  }
+
   Future<Map<String, dynamic>> updateSettings(Map<String, dynamic> body) async =>
       Map<String, dynamic>.from(
         await _api.patch('/businesses/current/settings', body: body) as Map,

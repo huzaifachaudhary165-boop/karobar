@@ -160,7 +160,10 @@ class SettingsUpdate(InputModel):
     enable_serial_numbers: bool | None = None
     enable_multi_godown: bool | None = None
 
-    invoice_template: str | None = Field(None, pattern="^(classic|minimal|gst|receipt)$")
+    # Validated against the registry rather than by a pattern: a hard-coded
+    # alternation meant adding a theme silently made it unsavable, which looks
+    # from the outside like a picker that does not work.
+    invoice_template: str | None = Field(None, max_length=32)
     print_size: str | None = Field(None, pattern="^(A4|A5|thermal58|thermal80)$")
     terms_and_conditions: str | None = None
     invoice_footer: str | None = None
@@ -184,6 +187,31 @@ class SettingsUpdate(InputModel):
 
     default_low_stock_qty: MoneyField | None = None
     extra: dict[str, Any] | None = None
+
+    @field_validator("invoice_template")
+    @classmethod
+    def _known_theme(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        from app.services.invoice_templates import TEMPLATES
+        from app.services.invoice_themes import THEMES
+
+        chosen = value.lower().strip()
+        if chosen not in THEMES and chosen not in TEMPLATES:
+            raise ValueError(f"'{value}' is not one of the invoice looks on offer.")
+        return chosen
+
+
+class InvoiceThemeOut(ORMModel):
+    """One of the looks a shop can print in."""
+
+    key: str
+    name: str
+    layout: str
+    accent: str
+    paper: str
+    density: str
+    is_roll: bool
 
 
 class SettingsOut(ORMModel):
