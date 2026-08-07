@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../theme/app_colors.dart';
+import '../utils/device.dart';
+import 'common.dart';
 
 /// Opens the camera and returns the first barcode it reads, or null if the user
 /// backs out.
@@ -9,7 +11,15 @@ import '../theme/app_colors.dart';
 /// Detection is debounced on the code itself: the camera fires the same barcode
 /// many times a second while it stays in frame, and without this a single scan
 /// would add the same item to a bill repeatedly.
+/// On a machine with no camera plugin this says so and returns null, rather
+/// than opening a sheet that throws. Handled here rather than at each call
+/// site: there are four, and the fifth would be the one that forgot.
 Future<String?> scanBarcode(BuildContext context) {
+  if (!Device.canScanBarcodes) {
+    showError(context, 'Scanning ${Device.unavailableHere.toLowerCase()}');
+    return Future.value();
+  }
+
   return showModalBottomSheet<String>(
     context: context,
     isScrollControlled: true,

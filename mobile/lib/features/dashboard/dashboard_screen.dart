@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/l10n/strings.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/device.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
@@ -688,7 +689,11 @@ class _QuickActions extends ConsumerWidget {
             icon: Icons.document_scanner_outlined,
             label: strings.get('scan_bill'),
             color: AppColors.warning,
-            onTap: () => context.goNamed(Routes.scan),
+            // Bill scanning runs on-device and is mobile-only, so on a desktop
+            // the tile says why rather than opening a screen that cannot work.
+            onTap: () => Device.canReadBills
+                ? context.goNamed(Routes.scan)
+                : showError(context, 'Bill scanning ${Device.unavailableHere.toLowerCase()}'),
           ),
           ActionTile(
             icon: Icons.person_add_outlined,
