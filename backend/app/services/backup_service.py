@@ -24,9 +24,18 @@ from app.core.errors import BusinessRuleError
 from app.core.logging import log
 from app.models.business import Business, BusinessSettings
 from app.models.expense import Expense, ExpenseCategory
-from app.models.item import Item, ItemCategory, Unit
+from app.models.finance import AccountTransfer, Loan, LoanPayment
+from app.models.item import (
+    Godown, GodownStock, Item, ItemBatch, ItemCategory, ItemSerial, Unit,
+)
+from app.models.loyalty import LoyaltyEntry, LoyaltyProgram
+from app.models.manufacturing import (
+    BillOfMaterials, BomComponent, ConsumedMaterial, ProductionRun,
+)
 from app.models.party import Party, PartyGroup
-from app.models.payment import Account, Payment
+from app.models.payment import Account, Payment, PaymentAllocation
+from app.models.pricing import DiscountScheme, PriceList, PriceListEntry
+from app.models.recurring import RecurringInvoice
 from app.models.voucher import Voucher, VoucherLine
 from app.services.base import ActorContext
 
@@ -40,14 +49,66 @@ _TABLES: list[tuple[str, Any]] = [
     ("parties", Party),
     ("units", Unit),
     ("item_categories", ItemCategory),
+    ("godowns", Godown),
     ("items", Item),
+    ("item_batches", ItemBatch),
+    ("item_serials", ItemSerial),
+    ("godown_stocks", GodownStock),
     ("accounts", Account),
     ("expense_categories", ExpenseCategory),
     ("expenses", Expense),
+    ("price_lists", PriceList),
+    ("price_list_entries", PriceListEntry),
+    ("discount_schemes", DiscountScheme),
     ("vouchers", Voucher),
     ("voucher_lines", VoucherLine),
     ("payments", Payment),
+    # Without this a restored shop has its payments and its invoices and no
+    # record of which paid which, so every bill reads unpaid.
+    ("payment_allocations", PaymentAllocation),
+    ("account_transfers", AccountTransfer),
+    ("loans", Loan),
+    ("loan_payments", LoanPayment),
+    ("loyalty_programs", LoyaltyProgram),
+    ("loyalty_entries", LoyaltyEntry),
+    ("bills_of_materials", BillOfMaterials),
+    ("bom_components", BomComponent),
+    ("production_runs", ProductionRun),
+    ("consumed_materials", ConsumedMaterial),
+    ("recurring_invoices", RecurringInvoice),
 ]
+
+# Tables a backup deliberately leaves out, and why.
+#
+# Named rather than merely absent, because the test that checks nothing has
+# been forgotten needs to tell "left out on purpose" apart from "nobody
+# remembered". A feature added without a line here fails that test.
+_DELIBERATELY_SKIPPED: dict[str, str] = {
+    "businesses": "the shop itself is created by signing up, not restored",
+    "business_members": "who has access is a live decision, not a backup",
+    "business_settings": "restored separately so a backup cannot silently "
+                         "re-enable a tax regime a shop has since turned off",
+    "users": "identity belongs to the account, not to one shop's data",
+    "user_sessions": "a session is not data",
+    "otp_challenges": "short-lived by design",
+    "audit_logs": "a record of what happened, not something to recreate",
+    "change_logs": "the sync feed rebuilds itself",
+    "sync_states": "per device, and the device decides",
+    "number_sequences": "rebuilt from the documents themselves",
+    "notifications": "about a moment that has passed",
+    "message_logs": "what was sent, not what the shop is",
+    "integrations": "holds credentials, which do not belong in a file a shop "
+                    "emails to itself",
+    "attachments": "the files live in storage, not in the database",
+    "stock_ledger_entries": "rebuilt from the vouchers that caused them",
+    "ai_conversations": "a chat history, not shop data",
+    "ai_messages": "a chat history, not shop data",
+    "ai_tool_calls": "a chat history, not shop data",
+    "ai_usage": "metering, which belongs to the account",
+    "ai_insights": "regenerated from the figures",
+    "ocr_jobs": "a scan in progress, finished long before a restore",
+    "tax_rates": "seeded per country on sign-up",
+}
 
 
 def _plain(value: Any) -> Any:

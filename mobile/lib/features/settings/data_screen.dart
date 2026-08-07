@@ -54,6 +54,12 @@ class _DataScreenState extends ConsumerState<DataScreen> {
           // share sheet would otherwise offer an unnamed temp file.
           fileNameOverrides: [result.filename],
         );
+
+        // Recorded after the sheet closes rather than before it opens: a
+        // shopkeeper who backs out of the share sheet has not backed anything
+        // up, and telling them they have is the one thing this must not do.
+        await ref.read(tokenStoreProvider).setLastBackupAt(DateTime.now());
+        if (mounted) setState(() {});
       });
 
   Future<void> _restore() => _run('restore', () async {
@@ -205,7 +211,14 @@ class _DataScreenState extends ConsumerState<DataScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+
+          // When the last one was taken, and a nudge when it was not recent.
+          // A shop that has never backed up does not know that about itself,
+          // and the day they find out is the day it would have mattered.
+          _LastBackup(at: ref.read(tokenStoreProvider).lastBackupAt),
+
+          const SizedBox(height: 12),
 
           _Action(
             icon: Icons.download_outlined,
@@ -256,6 +269,54 @@ class _DataScreenState extends ConsumerState<DataScreen> {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// When the last backup was taken, and a nudge when it was not recent.
+///
+/// A shop that has never backed up does not know that about itself, and the
+/// day they find out is the day it would have mattered. The line is quiet once
+/// a backup is recent and only becomes a warning when it stops being.
+class _LastBackup extends StatelessWidget {
+  const _LastBackup({required this.at});
+
+  final DateTime? at;
+
+  /// Past this, a backup is old enough to be worth saying so about.
+  static const _staleAfterDays = 14;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final when = at;
+    final days = when == null ? null : DateTime.now().difference(when).inDays;
+    final stale = days == null || days >= _staleAfterDays;
+
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      borderColor: stale ? AppColors.warning.withValues(alpha: 0.5) : null,
+      child: Row(
+        children: [
+          Icon(
+            stale ? Icons.warning_amber_rounded : Icons.check_circle_outline,
+            size: 18,
+            color: stale ? AppColors.warning : AppColors.success,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              when == null
+                  ? context.t('You have never backed up. It takes one tap.')
+                  : days == 0
+                      ? context.t('Backed up today.')
+                      : context.t('Last backed up ${Fmt.relative(when)}'
+                          '${stale ? ' — worth doing again.' : '.'}'),
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
         ],
       ),
     );

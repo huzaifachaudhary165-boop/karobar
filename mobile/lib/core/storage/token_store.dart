@@ -24,6 +24,7 @@ class TokenStore {
   static const _kLanguage = 'karobar.language';
   static const _kThemeMode = 'karobar.theme_mode';
   static const _kOnboarded = 'karobar.onboarded';
+  static const _kLastBackup = 'karobar.last_backup_at';
   static const _kPrinter = 'karobar.printer_address';
   static const _kPrinter80 = 'karobar.printer_80mm';
 
@@ -168,6 +169,19 @@ class TokenStore {
 
   String get themeMode => _prefs.getString(_kThemeMode) ?? 'system';
   Future<void> setThemeMode(String value) async => _prefs.setString(_kThemeMode, value);
+
+  /// When a backup was last actually taken.
+  ///
+  /// Kept on the device rather than on the server: it is a fact about this
+  /// phone having produced a file, and a shop that restores onto a new phone
+  /// has not thereby backed that phone up.
+  DateTime? get lastBackupAt {
+    final raw = _prefs.getString(_kLastBackup);
+    return raw == null ? null : DateTime.tryParse(raw);
+  }
+
+  Future<void> setLastBackupAt(DateTime when) async =>
+      _prefs.setString(_kLastBackup, when.toIso8601String());
 
   bool get onboarded => _prefs.getBool(_kOnboarded) ?? false;
   Future<void> setOnboarded(bool value) async => _prefs.setBool(_kOnboarded, value);
