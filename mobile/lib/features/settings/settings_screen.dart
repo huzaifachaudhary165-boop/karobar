@@ -204,6 +204,14 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                   const Divider(height: 1),
                   ListTile(
+                    leading: const Icon(Icons.event_repeat_outlined),
+                    title: Text(context.t('Repeating bills')),
+                    subtitle: const Text('Rent, subscriptions, standing orders'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.goNamed(Routes.recurring),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
                     leading: const Icon(Icons.sell_outlined),
                     title: Text(context.t('Rates & offers')),
                     subtitle: const Text('Wholesale prices and running discounts'),

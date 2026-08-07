@@ -70,6 +70,8 @@ final financeRepositoryProvider =
     Provider((ref) => FinanceRepository(ref.watch(apiClientProvider)));
 final pricingRepositoryProvider =
     Provider((ref) => PricingRepository(ref.watch(apiClientProvider)));
+final recurringRepositoryProvider =
+    Provider((ref) => RecurringRepository(ref.watch(apiClientProvider)));
 
 // ── offline queue ────────────────────────────────────────────────
 /// Long-lived: it listens to connectivity for the whole session and flushes the
@@ -561,6 +563,40 @@ final expiringBatchesProvider =
 /// The sticker sheets and rolls a shop can buy. Fixed data, so it is cached.
 final labelSizesProvider = FutureProvider<List<LabelSize>>((ref) {
   return ref.watch(stockRepositoryProvider).labelSizes();
+});
+
+// ── repeating bills ──────────────────────────────────────────────
+final recurringBillsProvider = FutureProvider.autoDispose<List<RecurringBill>>((ref) {
+  return ref.watch(recurringRepositoryProvider).list();
+});
+
+/// Raises whatever is due, once per app launch.
+///
+/// There is no scheduler on the server — it runs on functions that only exist
+/// while a request is in flight — so this call is the whole reason a repeating
+/// bill repeats. It is deliberately not `autoDispose`: leaving and returning
+/// to a screen must not raise the same bills again, and the server's own
+/// date check is the second line of defence rather than the first.
+final recurringRunProvider = FutureProvider<RecurringRun>((ref) async {
+  final session = ref.watch(sessionProvider);
+  if (session.status != AuthStatus.signedIn) return const RecurringRun();
+
+  try {
+    final run = await ref.read(recurringRepositoryProvider).runDue();
+    if (run.created.isNotEmpty) {
+      // Real invoices just appeared, so anything counting them is stale.
+      ref.invalidate(recurringBillsProvider);
+      ref.invalidate(dashboardProvider);
+      ref.invalidate(vouchersProvider);
+      ref.invalidate(partiesProvider);
+      ref.invalidate(itemsProvider);
+    }
+    return run;
+  } catch (_) {
+    // A shop with no signal still has to be able to open the app. The bills
+    // are still owed and the next launch will raise them.
+    return const RecurringRun();
+  }
 });
 
 // ── rates and offers ─────────────────────────────────────────────

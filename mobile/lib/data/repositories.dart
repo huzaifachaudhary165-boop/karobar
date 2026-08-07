@@ -845,6 +845,42 @@ class PricingRepository {
   }
 }
 
+/// Bills that repeat.
+class RecurringRepository {
+  RecurringRepository(this._api);
+
+  final ApiClient _api;
+
+  Future<List<RecurringBill>> list() async {
+    final data = await _api.get('/recurring', cache: false);
+    return _parseList(data, RecurringBill.fromJson);
+  }
+
+  Future<RecurringBill> create(Map<String, dynamic> body) async {
+    final data = await _api.post('/recurring', body: body);
+    return RecurringBill.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<RecurringBill> update(String id, Map<String, dynamic> body) async {
+    final data = await _api.patch('/recurring/$id', body: body);
+    return RecurringBill.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<void> delete(String id) => _api.delete('/recurring/$id');
+
+  Future<void> runOne(String id) => _api.post('/recurring/$id/run');
+
+  /// Raises everything that has come due.
+  ///
+  /// There is no scheduler on the server — it runs on functions that only
+  /// exist while a request is in flight — so the app asking on open is what
+  /// makes a repeating bill repeat at all.
+  Future<RecurringRun> runDue() async {
+    final data = await _api.post('/recurring/run');
+    return RecurringRun.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+}
+
 /// Turns a raw list response into models, tolerating a null body.
 List<T> _parseList<T>(dynamic data, T Function(Map<String, dynamic>) parse) =>
     (data as List? ?? const [])

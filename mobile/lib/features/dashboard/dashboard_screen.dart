@@ -21,6 +21,12 @@ class DashboardScreen extends ConsumerWidget {
     final period = ref.watch(dashboardPeriodProvider);
     final symbol = ref.watch(sessionProvider).symbol;
 
+    // Watched here because the dashboard is the first screen after sign-in and
+    // there is no scheduler on the server: this call is the whole reason a
+    // repeating bill repeats. Bills going out in the shop's name is not
+    // something to do silently, so the result is shown below.
+    final run = ref.watch(recurringRunProvider).valueOrNull;
+
     return RefreshIndicator(
       onRefresh: () async => ref.invalidate(dashboardProvider),
       child: async.when(
@@ -37,18 +43,85 @@ class DashboardScreen extends ConsumerWidget {
             ),
           ],
         ),
-        data: (data) => _Body(data: data, period: period, symbol: symbol),
+        data: (data) =>
+            _Body(data: data, period: period, symbol: symbol, run: run),
+      ),
+    );
+  }
+}
+
+/// What the repeating bills did when the app opened.
+///
+/// Shown rather than left silent: invoices went out in the shop's name and
+/// were posted to customer accounts. A shopkeeper finding them later with no
+/// idea where they came from is the worst version of this feature.
+class _RecurringNotice extends ConsumerWidget {
+  const _RecurringNotice({required this.run, required this.symbol});
+
+  final RecurringRun run;
+  final String symbol;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final raised = run.created.length;
+    final warn = run.problems.isNotEmpty;
+
+    return AppCard(
+      borderColor: (warn ? AppColors.danger : AppColors.success).withValues(alpha: 0.45),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      onTap: () => context.goNamed(Routes.recurring),
+      child: Row(
+        children: [
+          Icon(
+            warn ? Icons.error_outline : Icons.event_repeat,
+            size: 19,
+            color: warn ? AppColors.danger : AppColors.success,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  raised > 0
+                      ? context.t('$raised repeating bill(s) raised · '
+                          '${Fmt.money(run.totalRaised, symbol: symbol, decimals: false)}')
+                      : context.t('${run.reminders.length + run.problems.length} '
+                          'repeating bill(s) need you'),
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  warn
+                      ? context.t('One or more schedules need checking')
+                      : context.t('Tap to see them'),
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right, size: 20),
+        ],
       ),
     );
   }
 }
 
 class _Body extends ConsumerWidget {
-  const _Body({required this.data, required this.period, required this.symbol});
+  const _Body({
+    required this.data,
+    required this.period,
+    required this.symbol,
+    this.run,
+  });
 
   final Dashboard data;
   final String period;
   final String symbol;
+  final RecurringRun? run;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -59,6 +132,12 @@ class _Body extends ConsumerWidget {
       children: [
         // Disappears for good once the shop has a customer, an item and a bill.
         const _SetupChecklist(),
+
+        if (run != null && !run!.isQuiet)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: _RecurringNotice(run: run!, symbol: symbol),
+          ),
 
         _PeriodPicker(
           value: period,

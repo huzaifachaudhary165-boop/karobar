@@ -1159,6 +1159,130 @@ class SerialAddResult {
       );
 }
 
+// ── repeating bills ──────────────────────────────────────────────
+/// A bill the shop raises on a schedule.
+class RecurringBill {
+  const RecurringBill({
+    required this.id,
+    required this.name,
+    required this.startsOn,
+    required this.nextRunOn,
+    this.voucherType = 'sale',
+    this.partyId,
+    this.partyName,
+    this.lines = const [],
+    this.frequency = 'monthly',
+    this.interval = 1,
+    this.scheduleLabel = '',
+    this.endsOn,
+    this.maxOccurrences,
+    this.lastRunOn,
+    this.occurrences = 0,
+    this.totalBilled = 0,
+    this.autoCreate = true,
+    this.isActive = true,
+    this.isDue = false,
+    this.isFinished = false,
+    this.lastError,
+  });
+
+  final String id;
+  final String name;
+  final DateTime startsOn;
+  final DateTime nextRunOn;
+  final String voucherType;
+  final String? partyId;
+  final String? partyName;
+  final List<Map<String, dynamic>> lines;
+  final String frequency;
+  final int interval;
+  final String scheduleLabel;
+  final DateTime? endsOn;
+  final int? maxOccurrences;
+  final DateTime? lastRunOn;
+  final int occurrences;
+  final num totalBilled;
+  final bool autoCreate;
+  final bool isActive;
+  final bool isDue;
+  final bool isFinished;
+  final String? lastError;
+
+  /// What one run of this bill comes to, before tax.
+  num get estimatedTotal => lines.fold<num>(
+        0,
+        (sum, line) => sum + asNum(line['qty']) * asNum(line['rate']),
+      );
+
+  factory RecurringBill.fromJson(Map<String, dynamic> json) => RecurringBill(
+        id: _str(json['id']),
+        name: _str(json['name']),
+        startsOn: _date(json['starts_on']) ?? DateTime.now(),
+        nextRunOn: _date(json['next_run_on']) ?? DateTime.now(),
+        voucherType: _str(json['voucher_type'], 'sale'),
+        partyId: json['party_id'] as String?,
+        partyName: json['party_name'] as String?,
+        lines: _maps(json['lines']),
+        frequency: _str(json['frequency'], 'monthly'),
+        interval: _num(json['interval']).toInt(),
+        scheduleLabel: _str(json['schedule_label']),
+        endsOn: _date(json['ends_on']),
+        maxOccurrences: (json['max_occurrences'] as num?)?.toInt(),
+        lastRunOn: _date(json['last_run_on']),
+        occurrences: _num(json['occurrences']).toInt(),
+        totalBilled: _num(json['total_billed']),
+        autoCreate: _bool(json['auto_create']),
+        isActive: _bool(json['is_active']),
+        isDue: _bool(json['is_due']),
+        isFinished: _bool(json['is_finished']),
+        lastError: json['last_error'] as String?,
+      );
+}
+
+/// What happened the last time due schedules were looked at.
+class RecurringRun {
+  const RecurringRun({
+    this.created = const [],
+    this.reminders = const [],
+    this.problems = const [],
+  });
+
+  final List<RaisedBill> created;
+  final List<Map<String, dynamic>> reminders;
+  final List<Map<String, dynamic>> problems;
+
+  bool get isQuiet => created.isEmpty && reminders.isEmpty && problems.isEmpty;
+
+  num get totalRaised => created.fold<num>(0, (sum, bill) => sum + bill.total);
+
+  factory RecurringRun.fromJson(Map<String, dynamic> json) => RecurringRun(
+        created: _maps(json['created']).map(RaisedBill.fromJson).toList(),
+        reminders: _maps(json['reminders']),
+        problems: _maps(json['problems']),
+      );
+}
+
+class RaisedBill {
+  const RaisedBill({
+    required this.voucherId,
+    required this.number,
+    this.name = '',
+    this.total = 0,
+  });
+
+  final String voucherId;
+  final String number;
+  final String name;
+  final num total;
+
+  factory RaisedBill.fromJson(Map<String, dynamic> json) => RaisedBill(
+        voucherId: _str(json['voucher_id']),
+        number: _str(json['number']),
+        name: _str(json['name']),
+        total: _num(json['total']),
+      );
+}
+
 /// A number as a shopkeeper would write it: 8 rather than 8.0, 2.5 as 2.5.
 ///
 /// Percentages arrive as "8.0000" and parse to a double, and a screen reading
