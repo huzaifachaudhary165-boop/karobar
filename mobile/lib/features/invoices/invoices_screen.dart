@@ -8,6 +8,7 @@ import '../../core/config/env.dart';
 import '../../core/l10n/strings.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/document_types.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
@@ -52,7 +53,7 @@ class _InvoicesScreenState extends ConsumerState<InvoicesScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
-            tooltip: strings.get('new_sale'),
+            tooltip: DocumentType.of(type).newLabel,
             onPressed: () => context.goNamed(
               Routes.invoiceForm,
               queryParameters: {'type': type},
@@ -64,9 +65,7 @@ class _InvoicesScreenState extends ConsumerState<InvoicesScreen> {
           child: TabBarSelector(
             value: type,
             options: {
-              'sale': 'Sales',
-              'purchase': 'Purchases',
-              'quotation': 'Quotations',
+              for (final doc in DocumentType.listed) doc.key: doc.plural,
             },
             onChanged: (value) => ref.read(voucherTypeProvider.notifier).state = value,
           ),
@@ -161,40 +160,76 @@ class TabBarSelector extends StatelessWidget {
   final Map<String, String> options;
   final ValueChanged<String> onChanged;
 
+  /// Past this many, equal shares stop being readable — a seventh of a phone
+  /// is not enough for "Delivery challan" — so the row scrolls instead.
+  static const _maxEvenlySplit = 3;
+
   @override
   Widget build(BuildContext context) {
+    final entries = options.entries.toList();
+    final scrolls = entries.length > _maxEvenlySplit;
+
+    final tabs = [
+      for (final entry in entries)
+        _Tab(
+          label: entry.value,
+          selected: value == entry.key,
+          onTap: () => onChanged(entry.key),
+          padded: scrolls,
+        ),
+    ];
+
     return SizedBox(
       height: 48,
-      child: Row(
-        children: [
-          for (final entry in options.entries)
-            Expanded(
-              child: InkWell(
-                onTap: () => onChanged(entry.key),
-                child: Container(
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(
-                        color: value == entry.key ? AppColors.primary : Colors.transparent,
-                        width: 2.5,
-                      ),
-                    ),
-                  ),
-                  child: Text(
-                    entry.value,
-                    style: TextStyle(
-                      fontWeight: value == entry.key ? FontWeight.w700 : FontWeight.w500,
-                      color: value == entry.key
-                          ? AppColors.primary
-                          : Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ),
+      child: scrolls
+          ? ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              children: tabs,
+            )
+          : Row(children: [for (final tab in tabs) Expanded(child: tab)]),
+    );
+  }
+}
+
+class _Tab extends StatelessWidget {
+  const _Tab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    required this.padded,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final bool padded;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        alignment: Alignment.center,
+        padding: padded ? const EdgeInsets.symmetric(horizontal: 14) : null,
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: selected ? AppColors.primary : Colors.transparent,
+              width: 2.5,
             ),
-        ],
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            color: selected
+                ? AppColors.primary
+                : Theme.of(context).colorScheme.onSurfaceVariant,
+            fontSize: 14,
+          ),
+        ),
       ),
     );
   }

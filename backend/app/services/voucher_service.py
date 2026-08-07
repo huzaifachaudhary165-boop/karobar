@@ -21,7 +21,7 @@ from app.core.pagination import PageParams, paginate
 from app.models.base import utcnow
 from app.models.business import Business, BusinessSettings
 from app.models.enums import (
-    DiscountType, PaymentDirection, StockMovement, VoucherStatus, VoucherType,
+    CONVERTIBLE_TO, DiscountType, PaymentDirection, StockMovement, VoucherStatus, VoucherType,
 )
 from app.models.item import Item
 from app.models.party import Party
@@ -35,6 +35,11 @@ from app.utils.tax import compute_line_tax, is_interstate
 
 # Documents whose totals should never change after they are settled.
 _LOCKED_STATUSES = {VoucherStatus.CANCELLED, VoucherStatus.CONVERTED}
+
+
+def _label(voucher_type: str) -> str:
+    """'purchase_order' → 'purchase order', for a message a shopkeeper reads."""
+    return str(voucher_type).replace("_", " ")
 
 
 class VoucherService(BaseService[Voucher]):
@@ -242,6 +247,22 @@ class VoucherService(BaseService[Voucher]):
         source = await self.get_or_404(voucher_id)
         if source.status == VoucherStatus.CONVERTED:
             raise ConflictError("This document has already been converted.")
+        if source.status == VoucherStatus.CANCELLED:
+            raise BusinessRuleError("A cancelled document cannot be converted.")
+
+        allowed = CONVERTIBLE_TO.get(VoucherType(source.voucher_type), frozenset())
+        if VoucherType(target_type) not in allowed:
+            raise BusinessRuleError(
+                f"A {_label(source.voucher_type)} cannot become a "
+                f"{_label(target_type)}."
+                + (
+                    f" It can become: {', '.join(sorted(_label(t) for t in allowed))}."
+                    if allowed
+                    else ""
+                ),
+                code="invalid_conversion",
+                details={"from": source.voucher_type, "allowed": sorted(allowed)},
+            )
 
         payload = VoucherCreate(
             voucher_type=target_type,

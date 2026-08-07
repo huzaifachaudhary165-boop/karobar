@@ -419,6 +419,7 @@ class Voucher {
     this.lines = const [],
     this.notes,
     this.source = 'manual',
+    this.convertibleTo = const [],
   });
 
   final String id;
@@ -444,9 +445,18 @@ class Voucher {
   final String? notes;
   final String source;
 
+  /// Document types this one may still become, decided by the server.
+  ///
+  /// The app offers exactly these and nothing else, so a conversion the server
+  /// would refuse — a purchase order into a sale invoice, say — is never on
+  /// screen to be tapped.
+  final List<String> convertibleTo;
+
   bool get isPaid => balanceAmount <= 0.005;
   bool get isSale => voucherType == 'sale';
   bool get fromAi => source == 'ai' || source == 'ocr';
+  bool get isConverted => status == 'converted';
+  bool get canConvert => convertibleTo.isNotEmpty;
 
   String get typeLabel => switch (voucherType) {
         'sale' => 'Sale invoice',
@@ -454,6 +464,9 @@ class Voucher {
         'sale_return' => 'Credit note',
         'purchase_return' => 'Debit note',
         'quotation' => 'Quotation',
+        'proforma' => 'Proforma invoice',
+        'sale_order' => 'Sale order',
+        'purchase_order' => 'Purchase order',
         'delivery_challan' => 'Delivery challan',
         _ => voucherType.replaceAll('_', ' '),
       };
@@ -481,6 +494,9 @@ class Voucher {
         lines: _maps(json['lines']).map(VoucherLine.fromJson).toList(),
         notes: json['notes'] as String?,
         source: _str(json['source'], 'manual'),
+        convertibleTo: (json['convertible_to'] as List? ?? const [])
+            .map((e) => e.toString())
+            .toList(),
       );
 }
 

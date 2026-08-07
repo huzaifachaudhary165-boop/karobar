@@ -193,6 +193,9 @@ class VoucherOut(ORMModel):
     is_interstate: bool
     is_overdue: bool = False
     days_overdue: int = 0
+    # Document types this one may still be turned into — empty once it has been
+    # converted or cancelled. The app builds its menu from exactly this list.
+    convertible_to: list[str] = []
 
     notes: str | None = None
     terms: str | None = None

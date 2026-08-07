@@ -7,6 +7,7 @@ import '../../core/network/api_exception.dart';
 import '../../core/l10n/strings.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/document_types.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/barcode_sheet.dart';
 import '../../core/widgets/common.dart';
@@ -56,16 +57,11 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
   String _paymentMode = 'cash';
   bool _busy = false;
 
-  bool get _isPurchase =>
-      widget.voucherType == 'purchase' || widget.voucherType == 'purchase_return';
+  DocumentType get _doc => DocumentType.of(widget.voucherType);
 
-  String get _title => switch (widget.voucherType) {
-        'purchase' => 'New purchase bill',
-        'quotation' => 'New quotation',
-        'sale_return' => 'Sale return',
-        'purchase_return' => 'Purchase return',
-        _ => 'New sale invoice',
-      };
+  bool get _isPurchase => _doc.isPurchase;
+
+  String get _title => _doc.newLabel;
 
   num get _subtotal => _lines.fold<num>(0, (sum, line) => sum + line.gross);
   num get _discount => _lines.fold<num>(0, (sum, line) => sum + line.discount);
@@ -189,7 +185,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
       showError(context, 'Add at least one item to the bill.');
       return;
     }
-    if (_party == null && widget.voucherType != 'quotation') {
+    if (_party == null && _doc.needsParty) {
       showError(context, 'Choose a ${_isPurchase ? 'supplier' : 'customer'} first.');
       return;
     }
@@ -215,7 +211,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
               })
           .toList(),
       if (_notes.text.trim().isNotEmpty) 'notes': _notes.text.trim(),
-      if (paid != null && paid > 0)
+      if (_doc.takesPayment && paid != null && paid > 0)
         'payment': {'amount': paid, 'mode': _paymentMode},
     };
 
@@ -422,7 +418,11 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                       ],
                     ),
                   ),
-                  if (widget.voucherType != 'quotation') ...[
+                  // Only a transaction takes money. Nobody pays against an
+                  // order or a challan — the money arrives with the invoice it
+                  // becomes — and offering the field invites an entry that has
+                  // nowhere to go.
+                  if (_doc.takesPayment) ...[
                     const SizedBox(height: 14),
                     AppCard(
                       child: Column(

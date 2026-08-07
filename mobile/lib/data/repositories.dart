@@ -394,6 +394,18 @@ class VoucherRepository {
     return Voucher.fromJson(Map<String, dynamic>.from(data as Map));
   }
 
+  /// Turns a quotation, order or challan into the document it becomes.
+  ///
+  /// The server decides what is legal — a purchase order can only become a
+  /// purchase bill — so this passes the target straight through rather than
+  /// second-guessing it.
+  Future<Voucher> convert(String id, String targetType) async {
+    final data = await _api.post('/vouchers/$id/convert', body: {
+      'target_type': targetType,
+    });
+    return Voucher.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
   Future<Voucher> cancel(String id, String? reason) async {
     final data = await _api.post('/vouchers/$id/cancel', body: {'reason': reason});
     return Voucher.fromJson(Map<String, dynamic>.from(data as Map));

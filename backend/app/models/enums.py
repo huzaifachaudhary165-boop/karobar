@@ -48,6 +48,27 @@ _LEDGER_AFFECTING = {
     VoucherType.SALE_RETURN, VoucherType.PURCHASE_RETURN,
 }
 
+# What each document is allowed to become.
+#
+# A promise turns into a transaction, and only ever on its own side of the
+# trade. Without this a purchase order could be converted into a sale invoice —
+# billing the shop's own supplier as if they were a customer, at the shop's own
+# buying prices. The default target was SALE, so that was one careless tap away.
+CONVERTIBLE_TO: dict[VoucherType, frozenset[VoucherType]] = {
+    VoucherType.QUOTATION: frozenset({
+        VoucherType.SALE, VoucherType.PROFORMA, VoucherType.SALE_ORDER,
+        VoucherType.DELIVERY_CHALLAN,
+    }),
+    VoucherType.PROFORMA: frozenset({
+        VoucherType.SALE, VoucherType.SALE_ORDER, VoucherType.DELIVERY_CHALLAN,
+    }),
+    VoucherType.SALE_ORDER: frozenset({
+        VoucherType.SALE, VoucherType.DELIVERY_CHALLAN,
+    }),
+    VoucherType.DELIVERY_CHALLAN: frozenset({VoucherType.SALE}),
+    VoucherType.PURCHASE_ORDER: frozenset({VoucherType.PURCHASE}),
+}
+
 
 class VoucherStatus(StrEnum):
     DRAFT = "draft"

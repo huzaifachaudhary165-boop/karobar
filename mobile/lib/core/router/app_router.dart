@@ -431,8 +431,25 @@ void openDeepLink(BuildContext context, String? deepLink, {WidgetRef? ref}) {
 
     case 'quotations':
       toTab(HomeTab.invoices, voucherType: 'quotation', voucherFilter: 'all');
+    case 'orders' || 'sale-orders':
+      toTab(HomeTab.invoices, voucherType: 'sale_order', voucherFilter: 'all');
+    case 'purchase-orders':
+      toTab(HomeTab.invoices, voucherType: 'purchase_order', voucherFilter: 'all');
+    case 'challans':
+      toTab(HomeTab.invoices, voucherType: 'delivery_challan', voucherFilter: 'all');
     case 'payments':
       toTab(HomeTab.parties, partyFilter: 'receivable');
+
+    case 'expiry':
+      context.goNamed(Routes.expiry);
+    case 'locations' || 'godowns':
+      context.goNamed(Routes.godowns);
+    case 'accounts':
+      context.goNamed(Routes.accounts);
+    case 'cheques':
+      context.goNamed(Routes.cheques);
+    case 'loans':
+      context.goNamed(Routes.loans);
 
     default:
       // Never a dead tap: an unknown route lands on the dashboard rather than

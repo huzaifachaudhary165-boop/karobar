@@ -11,7 +11,7 @@ from fastapi import APIRouter, Body, Depends, Query, Response, status
 from app.api.deps import DbSession, Tenant
 from app.core.pagination import PageParams, page_params
 from app.core.permissions import Perm
-from app.models.enums import VoucherType
+from app.models.enums import CONVERTIBLE_TO, VoucherStatus, VoucherType
 from app.schemas.common import Message, Paginated
 from app.schemas.voucher import (
     ConvertRequest, ShareRequest, ShareResponse, VoucherCreate, VoucherListItem, VoucherOut,
@@ -28,6 +28,14 @@ def _out(voucher) -> VoucherOut:
     data = VoucherOut.model_validate(voucher)
     data.is_overdue = voucher.is_overdue
     data.days_overdue = voucher.days_overdue
+    # What this document may still become. The app offers exactly these, so a
+    # conversion the server would refuse is never on screen to be tapped.
+    if voucher.status in (VoucherStatus.CONVERTED, VoucherStatus.CANCELLED):
+        data.convertible_to = []
+    else:
+        data.convertible_to = sorted(
+            CONVERTIBLE_TO.get(VoucherType(voucher.voucher_type), frozenset())
+        )
     return data
 
 

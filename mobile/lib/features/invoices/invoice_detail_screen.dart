@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/router/app_router.dart';
 import '../../core/l10n/strings.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/document_types.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
@@ -58,7 +59,20 @@ class InvoiceDetailScreen extends ConsumerWidget {
                     title: Text(context.t('Share summary')),
                   ),
                 ),
-                if (voucher.status != 'cancelled')
+                // Built from what the server says this document may become, so
+                // a conversion it would refuse never appears here at all.
+                for (final target in voucher.convertibleTo)
+                  PopupMenuItem(
+                    value: 'convert:$target',
+                    child: ListTile(
+                      dense: true,
+                      leading: Icon(DocumentType.of(target).icon),
+                      title: Text(
+                        context.t('Make into ${DocumentType.of(target).label.toLowerCase()}'),
+                      ),
+                    ),
+                  ),
+                if (voucher.status != 'cancelled' && !voucher.isConverted)
                   const PopupMenuItem(
                     value: 'cancel',
                     child: ListTile(
@@ -99,6 +113,11 @@ class InvoiceDetailScreen extends ConsumerWidget {
     final summary = '${voucher.typeLabel} ${voucher.number}\n'
         '${voucher.partyName ?? 'Walk-in'}\n'
         'Total: ${Fmt.money(voucher.total, symbol: symbol, decimals: false)}';
+
+    if (action.startsWith('convert:')) {
+      await _convert(context, ref, voucher, action.substring(8));
+      return;
+    }
 
     switch (action) {
       case 'print':
@@ -150,6 +169,59 @@ class InvoiceDetailScreen extends ConsumerWidget {
         } catch (error) {
           if (context.mounted) showError(context, error);
         }
+    }
+  }
+
+  /// Turns a promise into the transaction it was always going to become.
+  ///
+  /// The original is kept and marked converted rather than replaced: a customer
+  /// who signed off on an order will ask to see that order, and a shop that
+  /// cannot produce it has lost the argument.
+  Future<void> _convert(
+    BuildContext context,
+    WidgetRef ref,
+    Voucher voucher,
+    String target,
+  ) async {
+    final doc = DocumentType.of(target);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.t('Make into ${doc.label.toLowerCase()}?')),
+        content: Text(
+          context.t('${voucher.number} stays in your records, marked converted. '
+              'A new ${doc.label.toLowerCase()} is created with the same items '
+              'and rates'
+              '${doc.movesStock ? ', and stock moves.' : '.'}'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(context.t('Not yet')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(context.t('Yes, create it')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      final created =
+          await ref.read(voucherRepositoryProvider).convert(voucher.id, target);
+      if (!context.mounted) return;
+
+      ref.invalidate(voucherProvider(voucher.id));
+      invalidateBusinessData(ref);
+      showSuccess(context, '${created.number} created.');
+      context.pushReplacementNamed(
+        Routes.invoiceDetail,
+        pathParameters: {'id': created.id},
+      );
+    } catch (error) {
+      if (context.mounted) showError(context, error);
     }
   }
 }
