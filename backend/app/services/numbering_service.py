@@ -41,6 +41,7 @@ FALLBACK_PREFIX: dict[str, str] = {
     "payment_in": "RCP-",
     "payment_out": "PMT-",
     "expense": "EXP-",
+    "production": "MFG-",
 }
 
 

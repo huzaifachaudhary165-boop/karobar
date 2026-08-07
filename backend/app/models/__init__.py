@@ -17,6 +17,9 @@ from app.models.item import (
 )
 from app.models.party import Party, PartyGroup
 from app.models.loyalty import LoyaltyEntry, LoyaltyProgram
+from app.models.manufacturing import (
+    BillOfMaterials, BomComponent, ConsumedMaterial, ProductionRun,
+)
 from app.models.pricing import DiscountScheme, PriceList, PriceListEntry
 from app.models.recurring import RecurringInvoice
 from app.models.payment import Account, Payment, PaymentAllocation
@@ -40,6 +43,7 @@ __all__ = [
     "TaxRate", "ExpenseCategory", "Account",
     "PriceList", "PriceListEntry", "DiscountScheme",
     "LoyaltyProgram", "LoyaltyEntry",
+    "BillOfMaterials", "BomComponent", "ProductionRun", "ConsumedMaterial",
     # transactions
     "Voucher", "VoucherLine", "Payment", "PaymentAllocation", "Expense",
     "AccountTransfer", "Loan", "LoanPayment", "RecurringInvoice",
