@@ -24,8 +24,11 @@ import '../../features/parties/party_form_screen.dart';
 import '../../features/payments/payments_screen.dart';
 import '../../features/reports/reports_screen.dart';
 import '../../features/settings/business_settings_screen.dart';
+import '../../features/loyalty/loyalty_screen.dart';
+import '../../features/manufacturing/manufacturing_screen.dart';
 import '../../features/pricing/pricing_screen.dart';
 import '../../features/recurring/recurring_screen.dart';
+import '../../features/tax/tax_screen.dart';
 import '../../features/settings/data_screen.dart';
 import '../../features/settings/invoice_theme_screen.dart';
 import '../../features/settings/settings_screen.dart';
@@ -69,6 +72,9 @@ abstract final class Routes {
   static const invoiceTheme = 'invoice-theme';
   static const pricing = 'pricing';
   static const recurring = 'recurring';
+  static const tax = 'tax';
+  static const loyalty = 'loyalty';
+  static const manufacturing = 'manufacturing';
   static const accounts = 'accounts';
   static const cheques = 'cheques';
   static const loans = 'loans';
@@ -278,6 +284,21 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: 'recurring',
             name: Routes.recurring,
             builder: (_, __) => const RecurringScreen(),
+          ),
+          GoRoute(
+            path: 'tax',
+            name: Routes.tax,
+            builder: (_, __) => const TaxScreen(),
+          ),
+          GoRoute(
+            path: 'loyalty',
+            name: Routes.loyalty,
+            builder: (_, __) => const LoyaltyScreen(),
+          ),
+          GoRoute(
+            path: 'manufacturing',
+            name: Routes.manufacturing,
+            builder: (_, __) => const ManufacturingScreen(),
           ),
           GoRoute(
             path: 'accounts',

@@ -1159,6 +1159,417 @@ class SerialAddResult {
       );
 }
 
+// ── Pakistani sales tax ──────────────────────────────────────────
+/// What a shop owes for the month, and what it is built from.
+class TaxReturn {
+  const TaxReturn({
+    this.enabled = false,
+    this.ntn,
+    this.strn,
+    this.registeredSales = 0,
+    this.unregisteredSales = 0,
+    this.totalSales = 0,
+    this.outputTax = 0,
+    this.furtherTax = 0,
+    this.inputTax = 0,
+    this.unclaimableInputTax = 0,
+    this.netPayable = 0,
+    this.carriedForward = 0,
+    this.saleCount = 0,
+    this.purchaseCount = 0,
+    this.provincialAuthority,
+  });
+
+  final bool enabled;
+  final String? ntn;
+  final String? strn;
+  final num registeredSales;
+  final num unregisteredSales;
+  final num totalSales;
+  final num outputTax;
+  final num furtherTax;
+  final num inputTax;
+
+  /// Tax paid to unregistered suppliers, which cannot be reclaimed.
+  final num unclaimableInputTax;
+
+  final num netPayable;
+  final num carriedForward;
+  final int saleCount;
+  final int purchaseCount;
+  final String? provincialAuthority;
+
+  bool get owesNothing => netPayable <= 0;
+
+  factory TaxReturn.fromJson(Map<String, dynamic> json) => TaxReturn(
+        enabled: _bool(json['enabled']),
+        ntn: json['ntn'] as String?,
+        strn: json['strn'] as String?,
+        registeredSales: _num(json['registered_sales']),
+        unregisteredSales: _num(json['unregistered_sales']),
+        totalSales: _num(json['total_sales']),
+        outputTax: _num(json['output_tax']),
+        furtherTax: _num(json['further_tax']),
+        inputTax: _num(json['input_tax']),
+        unclaimableInputTax: _num(json['unclaimable_input_tax']),
+        netPayable: _num(json['net_payable']),
+        carriedForward: _num(json['carried_forward']),
+        saleCount: _num(json['sale_count']).toInt(),
+        purchaseCount: _num(json['purchase_count']).toInt(),
+        provincialAuthority: json['provincial_authority'] as String?,
+      );
+}
+
+// ── loyalty ──────────────────────────────────────────────────────
+/// A shop's points scheme.
+class LoyaltyProgram {
+  const LoyaltyProgram({
+    required this.id,
+    this.name = 'Loyalty points',
+    this.earnRate = 0.01,
+    this.pointValue = 1,
+    this.minBillToEarn,
+    this.minPointsToRedeem = 0,
+    this.maxRedeemPercent = 100,
+    this.expiresAfterMonths,
+    this.isActive = true,
+    this.costPercent = 0,
+    this.summary = '',
+  });
+
+  final String id;
+  final String name;
+  final num earnRate;
+  final num pointValue;
+  final num? minBillToEarn;
+  final int minPointsToRedeem;
+  final num maxRedeemPercent;
+  final int? expiresAfterMonths;
+  final bool isActive;
+
+  /// What the scheme costs as a percentage of turnover.
+  final num costPercent;
+  final String summary;
+
+  /// "One point per Rs 100" — the earn rate as a shopkeeper would say it.
+  String get earnLabel {
+    if (earnRate <= 0) return 'No points';
+    final per = 1 / earnRate;
+    return 'One point per Rs ${trimZeros(per.roundToDouble())}';
+  }
+
+  factory LoyaltyProgram.fromJson(Map<String, dynamic> json) => LoyaltyProgram(
+        id: _str(json['id']),
+        name: _str(json['name'], 'Loyalty points'),
+        earnRate: _num(json['earn_rate']),
+        pointValue: _num(json['point_value']),
+        minBillToEarn: _numOrNull(json['min_bill_to_earn']),
+        minPointsToRedeem: _num(json['min_points_to_redeem']).toInt(),
+        maxRedeemPercent: _num(json['max_redeem_percent']),
+        expiresAfterMonths: (json['expires_after_months'] as num?)?.toInt(),
+        isActive: _bool(json['is_active']),
+        costPercent: _num(json['cost_percent']),
+        summary: _str(json['summary']),
+      );
+}
+
+/// One movement of a customer's points.
+class LoyaltyEntry {
+  const LoyaltyEntry({
+    required this.id,
+    required this.kind,
+    required this.createdAt,
+    this.points = 0,
+    this.balanceAfter = 0,
+    this.value = 0,
+    this.voucherNumber,
+    this.note,
+    this.expiresOn,
+  });
+
+  final String id;
+  final String kind;
+  final DateTime createdAt;
+  final int points;
+  final int balanceAfter;
+  final num value;
+  final String? voucherNumber;
+  final String? note;
+  final DateTime? expiresOn;
+
+  bool get isEarning => points > 0;
+
+  String get label => switch (kind) {
+        'earned' => 'Earned',
+        'redeemed' => 'Used',
+        'expired' => 'Expired',
+        'adjusted' => 'Adjusted',
+        'reversed' => 'Bill cancelled',
+        _ => kind,
+      };
+
+  factory LoyaltyEntry.fromJson(Map<String, dynamic> json) => LoyaltyEntry(
+        id: _str(json['id']),
+        kind: _str(json['kind']),
+        createdAt: _date(json['created_at']) ?? DateTime.now(),
+        points: _num(json['points']).toInt(),
+        balanceAfter: _num(json['balance_after']).toInt(),
+        value: _num(json['value']),
+        voucherNumber: json['voucher_number'] as String?,
+        note: json['note'] as String?,
+        expiresOn: _date(json['expires_on']),
+      );
+}
+
+/// What a customer could take off this bill.
+class LoyaltyQuote {
+  const LoyaltyQuote({
+    this.enabled = false,
+    this.balance = 0,
+    this.redeemable = 0,
+    this.value = 0,
+    this.pointValue = 0,
+    this.minPoints = 0,
+  });
+
+  final bool enabled;
+  final int balance;
+  final int redeemable;
+  final num value;
+  final num pointValue;
+  final int minPoints;
+
+  bool get hasSomethingToOffer => enabled && redeemable > 0;
+
+  factory LoyaltyQuote.fromJson(Map<String, dynamic> json) => LoyaltyQuote(
+        enabled: _bool(json['enabled']),
+        balance: _num(json['balance']).toInt(),
+        redeemable: _num(json['redeemable']).toInt(),
+        value: _num(json['value']),
+        pointValue: _num(json['point_value']),
+        minPoints: _num(json['min_points']).toInt(),
+      );
+}
+
+class LoyaltyHolder {
+  const LoyaltyHolder({
+    required this.partyId,
+    required this.partyName,
+    this.points = 0,
+    this.value = 0,
+  });
+
+  final String partyId;
+  final String partyName;
+  final int points;
+  final num value;
+
+  factory LoyaltyHolder.fromJson(Map<String, dynamic> json) => LoyaltyHolder(
+        partyId: _str(json['party_id']),
+        partyName: _str(json['party_name']),
+        points: _num(json['points']).toInt(),
+        value: _num(json['value']),
+      );
+}
+
+// ── manufacturing ────────────────────────────────────────────────
+/// A recipe: what goes into one batch of a finished item.
+class Recipe {
+  const Recipe({
+    required this.id,
+    required this.name,
+    required this.itemId,
+    this.itemName = '',
+    this.outputQty = 1,
+    this.labourCost = 0,
+    this.overheadCost = 0,
+    this.wastagePercent = 0,
+    this.notes,
+    this.isActive = true,
+    this.components = const [],
+    this.unitCost = 0,
+    this.batchCost = 0,
+    this.canMake = 0,
+  });
+
+  final String id;
+  final String name;
+  final String itemId;
+  final String itemName;
+  final num outputQty;
+  final num labourCost;
+  final num overheadCost;
+  final num wastagePercent;
+  final String? notes;
+  final bool isActive;
+  final List<RecipeComponent> components;
+
+  final num unitCost;
+  final num batchCost;
+
+  /// How many the materials on hand could make, decided by the scarcest one.
+  final num canMake;
+
+  bool get hasMaterials => canMake > 0;
+
+  factory Recipe.fromJson(Map<String, dynamic> json) => Recipe(
+        id: _str(json['id']),
+        name: _str(json['name']),
+        itemId: _str(json['item_id']),
+        itemName: _str(json['item_name']),
+        outputQty: _num(json['output_qty']),
+        labourCost: _num(json['labour_cost']),
+        overheadCost: _num(json['overhead_cost']),
+        wastagePercent: _num(json['wastage_percent']),
+        notes: json['notes'] as String?,
+        isActive: _bool(json['is_active']),
+        components: _maps(json['components']).map(RecipeComponent.fromJson).toList(),
+        unitCost: _num(json['unit_cost']),
+        batchCost: _num(json['batch_cost']),
+        canMake: _num(json['can_make']),
+      );
+}
+
+class RecipeComponent {
+  const RecipeComponent({
+    required this.itemId,
+    required this.itemName,
+    this.unitLabel = 'Pcs',
+    this.qty = 0,
+    this.rate = 0,
+    this.available,
+    this.note,
+  });
+
+  final String itemId;
+  final String itemName;
+  final String unitLabel;
+  final num qty;
+  final num rate;
+  final num? available;
+  final String? note;
+
+  factory RecipeComponent.fromJson(Map<String, dynamic> json) => RecipeComponent(
+        itemId: _str(json['item_id']),
+        itemName: _str(json['item_name']),
+        unitLabel: _str(json['unit_label'], 'Pcs'),
+        qty: _num(json['qty']),
+        rate: _num(json['rate']),
+        available: _numOrNull(json['available']),
+        note: json['note'] as String?,
+      );
+}
+
+/// What making a given number would need, before committing to it.
+class RecipeCosting {
+  const RecipeCosting({
+    this.making = 0,
+    this.materialCost = 0,
+    this.labourCost = 0,
+    this.overheadCost = 0,
+    this.wastageCost = 0,
+    this.totalCost = 0,
+    this.unitCost = 0,
+    this.requirements = const [],
+    this.shortages = const [],
+    this.canMakeNow = true,
+  });
+
+  final num making;
+  final num materialCost;
+  final num labourCost;
+  final num overheadCost;
+  final num wastageCost;
+  final num totalCost;
+  final num unitCost;
+  final List<MaterialNeed> requirements;
+  final List<MaterialNeed> shortages;
+  final bool canMakeNow;
+
+  factory RecipeCosting.fromJson(Map<String, dynamic> json) => RecipeCosting(
+        making: _num(json['making']),
+        materialCost: _num(json['material_cost']),
+        labourCost: _num(json['labour_cost']),
+        overheadCost: _num(json['overhead_cost']),
+        wastageCost: _num(json['wastage_cost']),
+        totalCost: _num(json['total_cost']),
+        unitCost: _num(json['unit_cost']),
+        requirements: _maps(json['requirements']).map(MaterialNeed.fromJson).toList(),
+        shortages: _maps(json['shortages']).map(MaterialNeed.fromJson).toList(),
+        canMakeNow: _bool(json['can_make_now']),
+      );
+}
+
+class MaterialNeed {
+  const MaterialNeed({
+    required this.itemId,
+    required this.itemName,
+    this.needed = 0,
+    this.available,
+    this.shortBy = 0,
+  });
+
+  final String itemId;
+  final String itemName;
+  final num needed;
+  final num? available;
+  final num shortBy;
+
+  factory MaterialNeed.fromJson(Map<String, dynamic> json) => MaterialNeed(
+        itemId: _str(json['item_id']),
+        itemName: _str(json['item_name']),
+        needed: _num(json['needed']),
+        available: _numOrNull(json['available']),
+        shortBy: _num(json['short_by']),
+      );
+}
+
+/// One occasion of actually making the thing.
+class ProductionRun {
+  const ProductionRun({
+    required this.id,
+    required this.number,
+    required this.itemName,
+    required this.runDate,
+    this.itemId = '',
+    this.qty = 0,
+    this.materialCost = 0,
+    this.labourCost = 0,
+    this.wastageCost = 0,
+    this.totalCost = 0,
+    this.unitCost = 0,
+    this.notes,
+  });
+
+  final String id;
+  final String number;
+  final String itemName;
+  final DateTime runDate;
+  final String itemId;
+  final num qty;
+  final num materialCost;
+  final num labourCost;
+  final num wastageCost;
+  final num totalCost;
+  final num unitCost;
+  final String? notes;
+
+  factory ProductionRun.fromJson(Map<String, dynamic> json) => ProductionRun(
+        id: _str(json['id']),
+        number: _str(json['number']),
+        itemName: _str(json['item_name']),
+        runDate: _date(json['run_date']) ?? DateTime.now(),
+        itemId: _str(json['item_id']),
+        qty: _num(json['qty']),
+        materialCost: _num(json['material_cost']),
+        labourCost: _num(json['labour_cost']),
+        wastageCost: _num(json['wastage_cost']),
+        totalCost: _num(json['total_cost']),
+        unitCost: _num(json['unit_cost']),
+        notes: json['notes'] as String?,
+      );
+}
+
 // ── repeating bills ──────────────────────────────────────────────
 /// A bill the shop raises on a schedule.
 class RecurringBill {

@@ -881,6 +881,141 @@ class RecurringRepository {
   }
 }
 
+/// Pakistani sales tax.
+class TaxRepository {
+  TaxRepository(this._api);
+
+  final ApiClient _api;
+
+  Future<TaxReturn> monthlyReturn({int? month, int? year}) async {
+    final data = await _api.get('/fbr/return', cache: false, query: {
+      'month': month,
+      'year': year,
+    });
+    return TaxReturn.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<Map<String, dynamic>> suggestedRates() async {
+    final data = await _api.get('/fbr/rates');
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  /// The sales register, as the portal's own CSV.
+  Future<String> annexureC({int? month, int? year}) async {
+    final response = await _api.raw('/fbr/annexure-c', query: {
+      'month': month,
+      'year': year,
+    });
+    return response.data.toString();
+  }
+}
+
+/// Loyalty points.
+class LoyaltyRepository {
+  LoyaltyRepository(this._api);
+
+  final ApiClient _api;
+
+  Future<LoyaltyProgram?> program() async {
+    final data = await _api.get('/loyalty/program', cache: false);
+    if (data == null) return null;
+    return LoyaltyProgram.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<LoyaltyProgram> saveProgram(Map<String, dynamic> body) async {
+    final data = await _api.put('/loyalty/program', body: body);
+    return LoyaltyProgram.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<int> balance(String partyId) async {
+    final data = await _api.get('/loyalty/balance/$partyId', cache: false);
+    return asNum((data as Map)['balance']).toInt();
+  }
+
+  Future<List<LoyaltyEntry>> history(String partyId) async {
+    final data = await _api.get('/loyalty/history/$partyId', cache: false);
+    return _parseList(data, LoyaltyEntry.fromJson);
+  }
+
+  Future<LoyaltyQuote> quote(String partyId, num billTotal) async {
+    final data = await _api.post('/loyalty/quote', body: {
+      'party_id': partyId,
+      'bill_total': billTotal,
+    });
+    return LoyaltyQuote.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<void> redeem({
+    required String partyId,
+    required int points,
+    required num billTotal,
+    String? voucherId,
+  }) =>
+      _api.post('/loyalty/redeem', body: {
+        'party_id': partyId,
+        'points': points,
+        'bill_total': billTotal,
+        if (voucherId != null) 'voucher_id': voucherId,
+      });
+
+  Future<void> adjust(String partyId, int points, String note) =>
+      _api.post('/loyalty/adjust', body: {
+        'party_id': partyId,
+        'points': points,
+        'note': note,
+      });
+
+  Future<List<LoyaltyHolder>> topHolders() async {
+    final data = await _api.get('/loyalty/top', cache: false);
+    return _parseList(data, LoyaltyHolder.fromJson);
+  }
+}
+
+/// Recipes and production runs.
+class ManufacturingRepository {
+  ManufacturingRepository(this._api);
+
+  final ApiClient _api;
+
+  Future<List<Recipe>> recipes() async {
+    final data = await _api.get('/manufacturing/recipes', cache: false);
+    return _parseList(data, Recipe.fromJson);
+  }
+
+  Future<Recipe> createRecipe(Map<String, dynamic> body) async {
+    final data = await _api.post('/manufacturing/recipes', body: body);
+    return Recipe.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<void> deleteRecipe(String id) => _api.delete('/manufacturing/recipes/$id');
+
+  /// What making this many would need, asked before committing to it.
+  Future<RecipeCosting> costing(String recipeId, num qty) async {
+    final data = await _api.get(
+      '/manufacturing/recipes/$recipeId/costing',
+      cache: false,
+      query: {'qty': qty},
+    );
+    return RecipeCosting.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<List<ProductionRun>> runs() async {
+    final data = await _api.get('/manufacturing/runs', cache: false);
+    return _parseList(data, ProductionRun.fromJson);
+  }
+
+  Future<ProductionRun> make(String recipeId, num qty, {String? notes}) async {
+    final data = await _api.post('/manufacturing/runs', body: {
+      'bom_id': recipeId,
+      'qty': qty,
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
+    });
+    return ProductionRun.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<void> undoRun(String id) => _api.delete('/manufacturing/runs/$id');
+}
+
 /// Turns a raw list response into models, tolerating a null body.
 List<T> _parseList<T>(dynamic data, T Function(Map<String, dynamic>) parse) =>
     (data as List? ?? const [])

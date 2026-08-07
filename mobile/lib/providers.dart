@@ -72,6 +72,12 @@ final pricingRepositoryProvider =
     Provider((ref) => PricingRepository(ref.watch(apiClientProvider)));
 final recurringRepositoryProvider =
     Provider((ref) => RecurringRepository(ref.watch(apiClientProvider)));
+final taxRepositoryProvider =
+    Provider((ref) => TaxRepository(ref.watch(apiClientProvider)));
+final loyaltyRepositoryProvider =
+    Provider((ref) => LoyaltyRepository(ref.watch(apiClientProvider)));
+final manufacturingRepositoryProvider =
+    Provider((ref) => ManufacturingRepository(ref.watch(apiClientProvider)));
 
 // ── offline queue ────────────────────────────────────────────────
 /// Long-lived: it listens to connectivity for the whole session and flushes the
@@ -563,6 +569,40 @@ final expiringBatchesProvider =
 /// The sticker sheets and rolls a shop can buy. Fixed data, so it is cached.
 final labelSizesProvider = FutureProvider<List<LabelSize>>((ref) {
   return ref.watch(stockRepositoryProvider).labelSizes();
+});
+
+// ── tax, loyalty, manufacturing ──────────────────────────────────
+/// Which month the tax return screen is showing.
+final taxMonthProvider = StateProvider.autoDispose<DateTime>(
+  (ref) => DateTime(DateTime.now().year, DateTime.now().month),
+);
+
+final taxReturnProvider = FutureProvider.autoDispose<TaxReturn>((ref) {
+  final month = ref.watch(taxMonthProvider);
+  return ref
+      .watch(taxRepositoryProvider)
+      .monthlyReturn(month: month.month, year: month.year);
+});
+
+final loyaltyProgramProvider = FutureProvider.autoDispose<LoyaltyProgram?>((ref) {
+  return ref.watch(loyaltyRepositoryProvider).program();
+});
+
+final loyaltyTopProvider = FutureProvider.autoDispose<List<LoyaltyHolder>>((ref) {
+  return ref.watch(loyaltyRepositoryProvider).topHolders();
+});
+
+final loyaltyHistoryProvider =
+    FutureProvider.autoDispose.family<List<LoyaltyEntry>, String>((ref, partyId) {
+  return ref.watch(loyaltyRepositoryProvider).history(partyId);
+});
+
+final recipesProvider = FutureProvider.autoDispose<List<Recipe>>((ref) {
+  return ref.watch(manufacturingRepositoryProvider).recipes();
+});
+
+final productionRunsProvider = FutureProvider.autoDispose<List<ProductionRun>>((ref) {
+  return ref.watch(manufacturingRepositoryProvider).runs();
 });
 
 // ── repeating bills ──────────────────────────────────────────────
