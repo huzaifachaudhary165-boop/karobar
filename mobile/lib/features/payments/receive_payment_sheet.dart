@@ -19,18 +19,34 @@ import '../../providers.dart';
 /// Direction is decided per party rather than by the caller — "receive" and
 /// "pay" are the same act seen from opposite sides of a balance, and a supplier
 /// you owe should not need a different button.
-Future<bool> showReceivePaymentSheet(BuildContext context, WidgetRef ref) async {
+/// [initialParty] and [initialAmount] come from a spoken command that was
+/// understood on the phone with no signal — "Ahmed ne 5000 diye". The sheet
+/// opens on the same screen it always does, with those two boxes already
+/// filled, so the shopkeeper reads them and taps save rather than retyping
+/// what they just said.
+Future<bool> showReceivePaymentSheet(
+  BuildContext context,
+  WidgetRef ref, {
+  Party? initialParty,
+  num? initialAmount,
+}) async {
   final done = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (_) => const _ReceivePaymentSheet(),
+    builder: (_) => _ReceivePaymentSheet(
+      initialParty: initialParty,
+      initialAmount: initialAmount,
+    ),
   );
   return done ?? false;
 }
 
 class _ReceivePaymentSheet extends ConsumerStatefulWidget {
-  const _ReceivePaymentSheet();
+  const _ReceivePaymentSheet({this.initialParty, this.initialAmount});
+
+  final Party? initialParty;
+  final num? initialAmount;
 
   @override
   ConsumerState<_ReceivePaymentSheet> createState() => _SheetState();
@@ -43,6 +59,21 @@ class _SheetState extends ConsumerState<_ReceivePaymentSheet> {
   Party? _party;
   bool _saving = false;
   String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    final party = widget.initialParty;
+    if (party == null) return;
+
+    // Set directly rather than through _choose: there is no build to schedule
+    // against yet, and the first one will read these anyway.
+    _party = party;
+    // What they said outranks what the app would have guessed from the
+    // outstanding balance.
+    _amount.text = widget.initialAmount?.toStringAsFixed(0) ??
+        (party.outstanding > 0 ? party.outstanding.toStringAsFixed(0) : '');
+  }
 
   @override
   void dispose() {

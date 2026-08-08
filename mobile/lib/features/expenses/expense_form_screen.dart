@@ -12,7 +12,13 @@ import '../../providers.dart';
 /// the backend creates a category on first use, so a shopkeeper never has to set
 /// one up before recording a cost.
 class ExpenseFormScreen extends ConsumerStatefulWidget {
-  const ExpenseFormScreen({super.key});
+  const ExpenseFormScreen({super.key, this.initialTitle, this.initialAmount});
+
+  /// Filled in from a spoken command the phone understood without a signal —
+  /// "bijli ka bill 3000". The shopkeeper reads it back and saves, rather than
+  /// typing again what they just said.
+  final String? initialTitle;
+  final num? initialAmount;
 
   @override
   ConsumerState<ExpenseFormScreen> createState() => _ExpenseFormScreenState();
@@ -29,6 +35,15 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   DateTime _date = DateTime.now();
   String _paymentMode = 'cash';
   bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialTitle != null) _title.text = widget.initialTitle!;
+    if (widget.initialAmount != null) {
+      _amount.text = widget.initialAmount!.toStringAsFixed(0);
+    }
+  }
 
   @override
   void dispose() {

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
+import '../../core/ai/offline_command.dart';
 import '../../core/l10n/strings.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
@@ -13,6 +14,64 @@ import '../../core/widgets/common.dart';
 import '../../core/widgets/karobar_logo.dart';
 import '../../data/models.dart';
 import '../../providers.dart';
+import '../expenses/expense_form_screen.dart';
+import '../payments/receive_payment_sheet.dart';
+
+/// Stands in for the error a request would have returned, when the phone
+/// already knows there is nothing to send it to.
+class _NoSignal {
+  const _NoSignal();
+
+  @override
+  String toString() =>
+      'No internet. Your work is saved here and goes up when the signal comes back.';
+}
+
+/// Something the phone understood with no signal, waiting for a tap.
+///
+/// Held rather than acted on. The shopkeeper reads back what was heard and
+/// decides — an entry made silently from a misheard sentence is found weeks
+/// later, in the wrong ledger.
+class _OfflineOffer {
+  const _OfflineOffer({required this.command, this.party});
+
+  final OfflineCommand command;
+  final Party? party;
+
+  String get title => switch (command.intent) {
+        CommandIntent.sale => 'Make a bill',
+        CommandIntent.purchase => 'Record a purchase',
+        CommandIntent.paymentIn => 'Money received',
+        CommandIntent.paymentOut => 'Money paid',
+        CommandIntent.expense => 'Record an expense',
+        _ => 'Open',
+      };
+
+  IconData get icon => switch (command.intent) {
+        CommandIntent.sale => Icons.receipt_long_outlined,
+        CommandIntent.purchase => Icons.local_shipping_outlined,
+        CommandIntent.paymentIn => Icons.south_west,
+        CommandIntent.paymentOut => Icons.north_east,
+        CommandIntent.expense => Icons.payments_outlined,
+        _ => Icons.bolt_outlined,
+      };
+
+  /// What was actually understood, in the shopkeeper's own terms, so a
+  /// mishearing is caught before it is saved rather than after.
+  String detail(String symbol) {
+    final parts = <String>[
+      if (party != null)
+        party!.name
+      else if (command.nameHint != null)
+        '${command.nameHint} — not in your list yet',
+      if (command.qty != null)
+        '${command.qty} ${command.unit ?? ''}'.trim(),
+      if (command.amount != null)
+        '$symbol${command.amount!.toStringAsFixed(0)}',
+    ];
+    return parts.isEmpty ? command.original : parts.join(' · ');
+  }
+}
 
 /// The conversational surface: type or speak, and the assistant performs the
 /// work through the same API the rest of the app uses.
@@ -38,6 +97,9 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
   List<String> _suggestions = const [];
   bool _sending = false;
   bool _listening = false;
+
+  /// Set when the server could not be reached but the sentence was understood.
+  _OfflineOffer? _offer;
   bool _speechReady = false;
 
   /// Counts down to sending what was just dictated.
@@ -204,6 +266,109 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
     return match ? preferred : 'en_US';
   }
 
+  /// What to do with a sentence the server never got to see.
+  ///
+  /// Reads the command on the phone and, when it is something that can be done
+  /// without a signal, offers to open the screen for it already filled in. The
+  /// work itself was never the blocked part: bills, payments and expenses go
+  /// into the outbox and upload when the signal comes back.
+  ///
+  /// Nothing is saved from here. The shopkeeper sees what was understood and
+  /// taps, or does not — an entry made silently from a misheard sentence is
+  /// found weeks later in the wrong ledger.
+  Future<ChatMessage> _offlineFallback(String message, Object error) async {
+    ChatMessage plain(String content) => ChatMessage(
+          id: 'error-${DateTime.now().microsecondsSinceEpoch}',
+          role: 'assistant',
+          content: content,
+          error: error.toString(),
+        );
+
+    final command = readCommand(message);
+
+    if (!command.worksOffline) {
+      // A question needs the shop's figures, which is exactly what cannot be
+      // reached. Saying which of the two problems it is beats a raw error.
+      return plain(
+        command.intent == CommandIntent.question
+            ? context.t('This one needs a signal — it has to look at your '
+                'figures. Everything else still works: try "Ahmed ko 2 kilo '
+                'cheeni 500 ka".')
+            : error.toString(),
+      );
+    }
+
+    // Read before the await, because the screen can be closed while the cached
+    // party list is being looked through.
+    final understood = context.t('No signal, but I understood that. '
+        'Tap below to check it and save — it will upload by itself.');
+
+    final party = await _cachedParty(command.nameHint);
+
+    if (mounted) {
+      setState(() => _offer = _OfflineOffer(command: command, party: party));
+    }
+    return plain(understood);
+  }
+
+  /// Finds a party in what the phone already holds.
+  ///
+  /// The list is whatever was last cached, so this is a best effort and says
+  /// so by returning null. A name that cannot be placed leaves the screen to
+  /// ask rather than putting the entry against the nearest-looking customer.
+  Future<Party?> _cachedParty(String? hint) async {
+    if (hint == null) return null;
+    try {
+      final page = await ref.read(partyRepositoryProvider).list(size: 200);
+      final index = bestMatch(hint, [for (final p in page.items) p.name]);
+      return index == null ? null : page.items[index];
+    } catch (_) {
+      // Never cached, or the cache is gone. The screen will ask.
+      return null;
+    }
+  }
+
+  /// Opens the screen the command asked for, carrying what was understood.
+  Future<void> _actOnOffer(_OfflineOffer offer) async {
+    setState(() => _offer = null);
+    final command = offer.command;
+
+    switch (command.intent) {
+      case CommandIntent.sale:
+      case CommandIntent.purchase:
+        context.pushNamed(
+          Routes.invoiceForm,
+          queryParameters: {
+            'type': command.intent == CommandIntent.sale ? 'sale' : 'purchase',
+            if (offer.party != null) 'party': offer.party!.id,
+          },
+        );
+
+      case CommandIntent.paymentIn:
+      case CommandIntent.paymentOut:
+        await showReceivePaymentSheet(
+          context,
+          ref,
+          initialParty: offer.party,
+          initialAmount: command.amount,
+        );
+
+      case CommandIntent.expense:
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => ExpenseFormScreen(
+              initialTitle: command.nameHint,
+              initialAmount: command.amount,
+            ),
+          ),
+        );
+
+      case CommandIntent.question:
+      case CommandIntent.unknown:
+        break; // Never offered in the first place.
+    }
+  }
+
   Future<void> _send(String text, {bool isVoice = false}) async {
     final message = text.trim();
     if (message.isEmpty || _sending) return;
@@ -215,6 +380,8 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
     setState(() {
       _sending = true;
       _suggestions = const [];
+      // Last message's offer belongs to last message.
+      _offer = null;
       _messages.add(
         ChatMessage(
           id: 'local-${DateTime.now().microsecondsSinceEpoch}',
@@ -228,6 +395,25 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
       );
     });
     _scrollToBottom();
+
+    // Known to be off the network: go straight to reading it here rather than
+    // spending the shopkeeper's next thirty seconds on a request that cannot
+    // arrive, and then telling them so.
+    if (!ref.read(syncStateProvider).online) {
+      final offline = await _offlineFallback(
+        message,
+        const _NoSignal(),
+      );
+      if (!mounted) return;
+      setState(() {
+        _messages
+          ..removeWhere((m) => m.id == 'typing')
+          ..add(offline);
+        _sending = false;
+      });
+      _scrollToBottom();
+      return;
+    }
 
     try {
       final repository = ref.read(aiRepositoryProvider);
@@ -262,17 +448,18 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
       }
     } catch (error) {
       if (!mounted) return;
+
+      // The server could not be reached, or the model is throttled. What the
+      // shopkeeper asked for almost always works offline anyway — bills,
+      // payments and expenses queue and go up later — so read the sentence
+      // here rather than handing back an error and stopping.
+      final fallback = await _offlineFallback(message, error);
+      if (!mounted) return;
+
       setState(() {
         _messages
           ..removeWhere((m) => m.id == 'typing')
-          ..add(
-            ChatMessage(
-              id: 'error-${DateTime.now().microsecondsSinceEpoch}',
-              role: 'assistant',
-              content: error.toString(),
-              error: error.toString(),
-            ),
-          );
+          ..add(fallback);
       });
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -349,6 +536,16 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
                     itemBuilder: (_, index) => _Bubble(message: _messages[index]),
                   ),
           ),
+
+          // Sits directly above the input, where the shopkeeper is already
+          // looking after their message failed.
+          if (_offer != null)
+            _OfferCard(
+              offer: _offer!,
+              symbol: ref.watch(sessionProvider).symbol,
+              onAct: () => _actOnOffer(_offer!),
+              onDismiss: () => setState(() => _offer = null),
+            ),
 
           if (_suggestions.isNotEmpty)
             SizedBox(
@@ -452,6 +649,74 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
 /// happening, and stopping it is one obvious tap rather than a guess. The whole
 /// bar is the cancel target — a small × would be the wrong size for a thumb on
 /// a shop counter.
+/// What the phone understood, offered rather than done.
+///
+/// The shopkeeper reads it back before anything is written. Dismissing is as
+/// easy as accepting, because the sentence came off a microphone in a noisy
+/// shop and sometimes it will simply be wrong.
+class _OfferCard extends StatelessWidget {
+  const _OfferCard({
+    required this.offer,
+    required this.symbol,
+    required this.onAct,
+    required this.onDismiss,
+  });
+
+  final _OfflineOffer offer;
+  final String symbol;
+  final VoidCallback onAct;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+      child: AppCard(
+        padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+        borderColor: AppColors.primary.withValues(alpha: 0.45),
+        child: Row(
+          children: [
+            Icon(offer.icon, size: 20, color: AppColors.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    context.t(offer.title),
+                    style: theme.textTheme.labelLarge
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    offer.detail(symbol),
+                    style: theme.textTheme.bodySmall,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 18),
+              visualDensity: VisualDensity.compact,
+              tooltip: context.t('Not that'),
+              onPressed: onDismiss,
+            ),
+            FilledButton(
+              onPressed: onAct,
+              style: FilledButton.styleFrom(minimumSize: const Size(0, 36)),
+              child: Text(context.t('Open')),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _AutoSendBar extends StatelessWidget {
   const _AutoSendBar({
     required this.seconds,
