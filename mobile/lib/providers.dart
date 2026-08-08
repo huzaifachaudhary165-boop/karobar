@@ -430,6 +430,16 @@ const partyTypeFilters = {'customer', 'supplier', 'both'};
 String? partyTypeForFilter(String filter) =>
     partyTypeFilters.contains(filter) ? filter : null;
 
+/// Whether an item-list chip wants live items, retired ones, or either.
+///
+/// Retired items are hidden everywhere — the list, and the picker on a bill —
+/// except the one chip that exists to find them again. A shop that cannot see
+/// what it put away cannot bring it back when the supplier starts stocking it.
+///
+/// Public so it can be tested: getting this backwards either hides every item
+/// the shop sells, or quietly puts discontinued stock back on bills.
+bool? itemActiveForFilter(String filter) => filter == 'retired' ? false : true;
+
 final partiesProvider = StreamProvider.autoDispose<Paged<Party>>((ref) {
   final search = ref.watch(partySearchProvider);
   final filter = ref.watch(partyFilterProvider);
@@ -470,6 +480,7 @@ final itemsProvider = StreamProvider.autoDispose<Paged<Item>>((ref) {
         onCached: emit,
         search: search.isEmpty ? null : search,
         onlyLowStock: filter == 'low_stock',
+        isActive: itemActiveForFilter(filter),
         size: 50,
       ));
 });

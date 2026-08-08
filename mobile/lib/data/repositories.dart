@@ -275,6 +275,11 @@ class ItemRepository {
     String? search,
     String? categoryId,
     bool onlyLowStock = false,
+    // An item a shop has retired should stop appearing — on the list and, more
+    // to the point, in the picker on a bill. The app tells shopkeepers to mark
+    // an item inactive when it cannot be deleted, and until this was passed
+    // that advice changed nothing at all.
+    bool? isActive = true,
     void Function(Paged<Item>)? onCached,
   }) async {
     final data = await _api.get('/items',
@@ -284,6 +289,7 @@ class ItemRepository {
       'search': search,
       'category_id': categoryId,
       if (onlyLowStock) 'only_low_stock': true,
+      if (isActive != null) 'is_active': isActive,
       'sort': 'name',
       'order': 'asc',
     });

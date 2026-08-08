@@ -355,8 +355,22 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
       }
     }
 
-    setState(() => _busy = true);
     final paid = num.tryParse(_paidAmount.text.trim());
+
+    // Cash and points cannot both cover the same rupee. Left to the server the
+    // bill would save, the redemption would fail on it, and the shopkeeper
+    // would be looking at a paid bill and a customer whose points are still
+    // there — with no idea which of the two is wrong.
+    if (_pointsToUse > 0 && paid != null && paid > _payable) {
+      showError(
+        context,
+        'Points already cover ${Fmt.money(_pointsValue)} of this bill. '
+        'Take at most ${Fmt.money(_payable)}, or use fewer points.',
+      );
+      return;
+    }
+
+    setState(() => _busy = true);
 
     final body = <String, dynamic>{
       'voucher_type': widget.voucherType,
@@ -573,6 +587,11 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                     (index) => Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: _LineCard(
+                        // Keyed to the line, not its position. Without this,
+                        // removing a line slides the next one up into its slot
+                        // and it inherits the removed line's rate box — the
+                        // shopkeeper reads out a price the bill does not carry.
+                        key: ObjectKey(_lines[index]),
                         line: _lines[index],
                         symbol: symbol,
                         onChanged: () => setState(_clampPoints),
@@ -847,6 +866,7 @@ class _PointsCard extends StatelessWidget {
 
 class _LineCard extends StatefulWidget {
   const _LineCard({
+    super.key,
     required this.line,
     required this.symbol,
     required this.onChanged,

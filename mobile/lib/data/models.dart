@@ -300,6 +300,7 @@ class Item {
     this.trackBatches = false,
     this.trackExpiry = false,
     this.trackSerial = false,
+    this.isActive = true,
     this.stockValue = 0,
     this.imageUrl,
     this.categoryName,
@@ -322,6 +323,10 @@ class Item {
   final bool trackBatches;
   final bool trackExpiry;
   final bool trackSerial;
+
+  /// False once the shop has retired it. Defaults true, because a response
+  /// that leaves the field out is a list that only carries live items anyway.
+  final bool isActive;
   final num stockValue;
 
   /// Whether selling this needs more than a quantity.
@@ -359,6 +364,7 @@ class Item {
         trackBatches: _bool(json['track_batches']),
         trackExpiry: _bool(json['track_expiry']),
         trackSerial: _bool(json['track_serial']),
+        isActive: json['is_active'] == null ? true : _bool(json['is_active']),
         stockValue: _num(json['stock_value']),
         imageUrl: json['image_url'] as String?,
         categoryName: json['category_name'] as String?,

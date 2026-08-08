@@ -48,6 +48,13 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
   bool _trackExpiry = false;
   bool _trackSerial = false;
 
+  /// Whether the shop still sells this.
+  ///
+  /// An item on old bills cannot be deleted without taking its history with
+  /// it, so retiring is the way out. Retired, it stops appearing on the item
+  /// list and in the picker on a bill, and this is where it comes back.
+  bool _isActive = true;
+
   bool get _isEditing => widget.itemId != null;
 
   static const _units = ['Pcs', 'Kg', 'g', 'L', 'ml', 'Box', 'Dzn', 'Pkt', 'Bag', 'Btl', 'm', 'Hr'];
@@ -90,6 +97,7 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
           _trackBatches = false;
           _trackExpiry = false;
           _trackSerial = false;
+          _isActive = true;
         });
       }
       return;
@@ -129,6 +137,7 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
         _trackBatches = item.trackBatches;
         _trackExpiry = item.trackExpiry;
         _trackSerial = item.trackSerial;
+        _isActive = item.isActive;
       });
     } catch (error) {
       if (mounted) showError(context, error);
@@ -163,6 +172,7 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
         'track_expiry': _trackExpiry,
         'track_serial': _trackSerial,
       },
+      if (_isEditing) 'is_active': _isActive,
     };
 
     try {
@@ -511,6 +521,24 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
                       // ask what to attach them to.
                       itemId: _isEditing ? widget.itemId : null,
                       itemName: _name.text.trim(),
+                    ),
+                  ],
+                  // Only on an item that exists. Nobody creates something in
+                  // order to retire it.
+                  if (_isEditing) ...[
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(context.t('Still selling this')),
+                      subtitle: Text(
+                        _isActive
+                            ? context.t('Turn off to take it off your item list '
+                                'and off new bills. Old bills keep it.')
+                            : context.t('Retired — it will not show on the item '
+                                'list or on a new bill.'),
+                      ),
+                      value: _isActive,
+                      onChanged: (value) => setState(() => _isActive = value),
                     ),
                   ],
                   const SizedBox(height: 26),

@@ -6,6 +6,9 @@ venv/
 .env
 *.db
 *.db-journal
+# SQLite in WAL mode leaves these beside the test database.
+*.db-wal
+*.db-shm
 *.sqlite3
 .pytest_cache/
 .ruff_cache/

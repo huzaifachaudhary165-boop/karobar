@@ -156,6 +156,7 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
                 for (final entry in {
                   'all': 'All items',
                   'low_stock': strings.get('low_stock'),
+                  'retired': 'Retired',
                 }.entries) ...[
                   ChoiceChip(
                     label: Text(entry.value),

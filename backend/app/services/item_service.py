@@ -177,17 +177,29 @@ class ItemService(BaseService[Item]):
             (
                 await self.db.execute(
                     self.base_query().where(
+                        # A retired item is one the shop has stopped selling.
+                        # Offering it to the AI or to a bill photo would put it
+                        # back on a bill by the back door.
+                        Item.is_active.is_(True),
                         or_(
                             func.lower(Item.name).like(like),
                             func.lower(func.coalesce(Item.sku, "")).like(like),
                             func.lower(func.coalesce(Item.barcode, "")).like(like),
-                        )
+                        ),
                     ).limit(25)
                 )
             ).scalars().all()
         )
         if len(pool) < 3:
-            pool += list((await self.db.execute(self.base_query().limit(500))).scalars().all())
+            # Same rule as above: a near-miss on the name is still no reason to
+            # put something the shop has stopped selling back on a bill.
+            pool += list(
+                (
+                    await self.db.execute(
+                        self.base_query().where(Item.is_active.is_(True)).limit(500)
+                    )
+                ).scalars().all()
+            )
         by_id = {i.id: i for i in pool}
         ranked = rank_matches(query, [(i.id, i.name) for i in by_id.values()], limit=limit)
         return [(by_id[iid], score) for iid, _n, score in ranked]
