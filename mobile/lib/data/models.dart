@@ -297,6 +297,9 @@ class Item {
     this.taxRate = 0,
     this.isLowStock = false,
     this.trackInventory = true,
+    this.trackBatches = false,
+    this.trackExpiry = false,
+    this.trackSerial = false,
     this.stockValue = 0,
     this.imageUrl,
     this.categoryName,
@@ -316,7 +319,18 @@ class Item {
   final num taxRate;
   final bool isLowStock;
   final bool trackInventory;
+  final bool trackBatches;
+  final bool trackExpiry;
+  final bool trackSerial;
   final num stockValue;
+
+  /// Whether selling this needs more than a quantity.
+  ///
+  /// A medicine sells out of a particular batch and a phone is a particular
+  /// handset. For everything else — sugar, cloth, screws — asking which one
+  /// would be a question with no answer.
+  bool get needsBatchPicked => trackBatches || trackExpiry;
+  bool get needsSerialPicked => trackSerial;
   final String? imageUrl;
   final String? categoryName;
   final String itemType;
@@ -342,6 +356,9 @@ class Item {
         taxRate: _num(json['tax_rate']),
         isLowStock: _bool(json['is_low_stock']),
         trackInventory: json['track_inventory'] == null ? true : _bool(json['track_inventory']),
+        trackBatches: _bool(json['track_batches']),
+        trackExpiry: _bool(json['track_expiry']),
+        trackSerial: _bool(json['track_serial']),
         stockValue: _num(json['stock_value']),
         imageUrl: json['image_url'] as String?,
         categoryName: json['category_name'] as String?,

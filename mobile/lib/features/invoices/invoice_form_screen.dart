@@ -14,6 +14,7 @@ import '../../core/widgets/common.dart';
 import '../../data/models.dart';
 import '../../data/offline_write.dart';
 import '../../providers.dart';
+import '../stock/line_pickers.dart';
 
 /// Build a bill: pick a party, add lines, optionally take payment.
 ///
@@ -51,6 +52,20 @@ class _LineDraft {
   /// leaves this line alone: the number they agreed with the customer must not
   /// be overwritten by a price list a moment later.
   bool rateEditedByHand = false;
+
+  /// Which batch this comes out of, when the item is kept in batches.
+  ///
+  /// Left null the server sells from whichever batch expires first, which is
+  /// what a shop wants nine times out of ten. It is set when the shopkeeper
+  /// has a particular box in their hand and it is not that one.
+  String? batchId;
+  String? batchLabel;
+
+  /// The exact pieces going out, for items followed one by one.
+  ///
+  /// Not a count — the customer is walking away with these, and which ones
+  /// they were is the whole question when they come back.
+  final serials = <String>[];
 
   num get gross => qty * rate;
   num get discount => gross * discountPercent / 100;
@@ -322,6 +337,24 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
       return;
     }
 
+    // A bill for two handsets that does not say which two is the bill nobody
+    // can answer a warranty claim from six months later. Only for what is
+    // going out — pieces coming in are registered on the item, not sold.
+    if (!_isPurchase) {
+      final unnamed = _lines
+          .where((line) =>
+              line.item.needsSerialPicked && line.serials.length != line.qty)
+          .firstOrNull;
+      if (unnamed != null) {
+        showError(
+          context,
+          'Choose which ${unnamed.item.name} is going out — '
+          '${unnamed.serials.length} of ${Fmt.qty(unnamed.qty)} chosen.',
+        );
+        return;
+      }
+    }
+
     setState(() => _busy = true);
     final paid = num.tryParse(_paidAmount.text.trim());
 
@@ -336,6 +369,8 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                 'qty': line.qty,
                 'rate': line.rate,
                 'tax_rate': line.taxRate,
+                if (line.batchId != null) 'batch_id': line.batchId,
+                if (line.serials.isNotEmpty) 'serial_numbers': line.serials,
                 if (line.discountPercent > 0) ...{
                   'discount_type': 'percent',
                   'discount_value': line.discountPercent,
@@ -949,9 +984,88 @@ class _LineCardState extends State<_LineCard> {
                 ],
               ),
             ),
+
+          // Only for items a shop actually follows piece by piece. Asked of
+          // sugar it would be a question with no answer, so it is not asked.
+          if (line.item.needsBatchPicked || line.item.needsSerialPicked)
+            Padding(
+              padding: const EdgeInsets.only(top: 6, right: 8),
+              child: Row(
+                children: [
+                  if (line.item.needsBatchPicked)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ActionChip(
+                        avatar: const Icon(Icons.inventory_2_outlined, size: 15),
+                        label: Text(
+                          line.batchLabel ?? context.t('Oldest batch'),
+                          style: theme.textTheme.labelSmall,
+                        ),
+                        onPressed: _pickBatch,
+                      ),
+                    ),
+                  if (line.item.needsSerialPicked)
+                    ActionChip(
+                      avatar: Icon(
+                        Icons.pin_outlined,
+                        size: 15,
+                        // Red until the pieces are named: a bill for two
+                        // handsets with no IMEIs on it is the bill nobody can
+                        // answer a warranty claim from.
+                        color: line.serials.length == line.qty
+                            ? null
+                            : AppColors.danger,
+                      ),
+                      label: Text(
+                        line.serials.isEmpty
+                            ? context.t('Choose pieces')
+                            : context.t('${line.serials.length} of ${Fmt.qty(line.qty)}'),
+                        style: theme.textTheme.labelSmall,
+                      ),
+                      onPressed: _pickSerials,
+                    ),
+                ],
+              ),
+            ),
         ],
       ),
     );
+  }
+
+  Future<void> _pickBatch() async {
+    final picked = await showBatchPicker(
+      context,
+      itemId: widget.line.item.id,
+      selectedId: widget.line.batchId,
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      widget.line.batchId = picked.batch?.id;
+      widget.line.batchLabel = picked.batch?.batchNumber;
+    });
+    widget.onChanged();
+  }
+
+  Future<void> _pickSerials() async {
+    final picked = await showSerialPicker(
+      context,
+      itemId: widget.line.item.id,
+      itemName: widget.line.item.name,
+      wanted: widget.line.qty.toInt(),
+      already: widget.line.serials,
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      widget.line.serials
+        ..clear()
+        ..addAll(picked);
+      // The bill is for the pieces named on it. Two IMEIs and a quantity of
+      // three is a bill that cannot be true.
+      if (picked.isNotEmpty) widget.line.qty = picked.length;
+    });
+    widget.onChanged();
   }
 }
 

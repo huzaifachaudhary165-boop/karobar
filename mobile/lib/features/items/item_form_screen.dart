@@ -10,6 +10,7 @@ import '../../core/widgets/common.dart';
 import '../../data/offline_write.dart';
 import '../../providers.dart';
 import '../invoices/print_sheet.dart';
+import '../stock/tracking_card.dart';
 
 /// Create or edit an item, and adjust its stock.
 class ItemFormScreen extends ConsumerStatefulWidget {
@@ -39,6 +40,13 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
   bool _busy = false;
   bool _loading = false;
   num _currentStock = 0;
+
+  // Off unless the shopkeeper asks for it. Most shops sell sugar and soap,
+  // where "which batch?" is a question with no answer, and a form that asks it
+  // of everything is a form people stop filling in.
+  bool _trackBatches = false;
+  bool _trackExpiry = false;
+  bool _trackSerial = false;
 
   bool get _isEditing => widget.itemId != null;
 
@@ -79,6 +87,9 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
           _taxRate.text = '0';
           _unit = 'Pcs';
           _isService = false;
+          _trackBatches = false;
+          _trackExpiry = false;
+          _trackSerial = false;
         });
       }
       return;
@@ -115,6 +126,9 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
         _unit = item.unitLabel;
         _isService = item.itemType == 'service';
         _currentStock = item.stockQty;
+        _trackBatches = item.trackBatches;
+        _trackExpiry = item.trackExpiry;
+        _trackSerial = item.trackSerial;
       });
     } catch (error) {
       if (mounted) showError(context, error);
@@ -143,6 +157,11 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
       if (!_isEditing && !_isService) ...{
         'opening_stock': openingStock,
         'opening_stock_value': openingStock * purchasePrice,
+      },
+      if (!_isService) ...{
+        'track_batches': _trackBatches,
+        'track_expiry': _trackExpiry,
+        'track_serial': _trackSerial,
       },
     };
 
@@ -470,6 +489,30 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
                       ),
                     ),
                   ),
+                  if (!_isService) ...[
+                    const SizedBox(height: 18),
+                    TrackingCard(
+                      batches: _trackBatches,
+                      expiry: _trackExpiry,
+                      serial: _trackSerial,
+                      onBatches: (value) => setState(() {
+                        _trackBatches = value;
+                        // Expiry is a fact about a batch. Without one there is
+                        // nothing for the date to belong to.
+                        if (!value) _trackExpiry = false;
+                      }),
+                      onExpiry: (value) => setState(() {
+                        _trackExpiry = value;
+                        if (value) _trackBatches = true;
+                      }),
+                      onSerial: (value) => setState(() => _trackSerial = value),
+                      // Batches and serials belong to an item that exists.
+                      // Offering to add them before the item is saved would
+                      // ask what to attach them to.
+                      itemId: _isEditing ? widget.itemId : null,
+                      itemName: _name.text.trim(),
+                    ),
+                  ],
                   const SizedBox(height: 26),
                   FilledButton(
                     onPressed: _busy ? null : _save,

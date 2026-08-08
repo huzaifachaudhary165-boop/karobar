@@ -157,6 +157,12 @@ class ItemListItem(ORMModel):
     stock_qty: Decimal
     tax_rate: Decimal
     track_inventory: bool
+    # The bill screen picks items from this list, and it is the screen that has
+    # to ask which batch or which handset. Left out here, a tracked item looks
+    # untracked to the one place the question actually gets asked.
+    track_batches: bool = False
+    track_expiry: bool = False
+    track_serial: bool = False
     is_low_stock: bool = False
     image_url: str | None = None
 

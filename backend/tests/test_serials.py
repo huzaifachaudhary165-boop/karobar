@@ -166,3 +166,121 @@ async def test_an_empty_list_of_serials_is_refused(shop):
 
     empty = await client.post("/items/serials", json={"item_id": item["id"], "serials": []})
     assert empty.status_code == 422, empty.text
+
+
+# ── selling a particular piece ─────────────────────────────────────
+# Registering a serial says "this piece exists", not "one more arrived" — the
+# stock came in on the purchase. So these start from an item that has stock and
+# serials for it, which is what a real shop has after a delivery.
+async def _stocked(client, name: str, serials: list[str]) -> dict:
+    response = await client.post(
+        "/items",
+        json={
+            "name": name, "sale_price": 62000, "purchase_price": 55000,
+            "unit_label": "Pcs", "track_serial": True,
+            "opening_stock": len(serials),
+        },
+    )
+    assert response.status_code == 201, response.text
+    item = response.json()
+
+    added = await client.post(
+        "/items/serials", json={"item_id": item["id"], "serials": serials}
+    )
+    assert added.status_code == 201, added.text
+    return item
+
+
+async def _sell(client, shop, item: dict, serials: list[str], rate: int = 62000):
+    return await client.post(
+        "/vouchers",
+        json={
+            "voucher_type": "sale",
+            "party_id": shop["customer"]["id"],
+            "lines": [
+                {
+                    "item_id": item["id"],
+                    "qty": len(serials),
+                    "rate": rate,
+                    "tax_rate": 0,
+                    "serial_numbers": serials,
+                }
+            ],
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_selling_a_handset_marks_that_handset_sold(shop):
+    client = shop["client"]
+    item = await _stocked(client, "Redmi 13", ["R-01", "R-02"])
+
+    sold = await _sell(client, shop, item, ["R-01"])
+    assert sold.status_code == 201, sold.text
+
+    found = (await client.get("/items/serials/lookup/R-01")).json()
+    assert found["serial"]["status"] == "sold"
+
+    # The other one is untouched — a bill takes the pieces named on it, not the
+    # first of everything on the shelf.
+    other = (await client.get("/items/serials/lookup/R-02")).json()
+    assert other["serial"]["status"] == "in_stock"
+
+
+@pytest.mark.asyncio
+async def test_the_same_handset_cannot_go_out_twice(shop):
+    """The whole reason a mobile shop buys this: being told at the counter that
+    the phone in their hand has already gone out the door."""
+    client = shop["client"]
+    # Two handsets on the shelf, so stock is not what stops the second sale —
+    # the shopkeeper has another one to sell, they just scanned the wrong box.
+    item = await _stocked(client, "Vivo Y17", ["V-01", "V-02"])
+
+    first = await _sell(client, shop, item, ["V-01"])
+    assert first.status_code == 201, first.text
+
+    again = await _sell(client, shop, item, ["V-01"])
+    assert again.status_code == 422, again.text
+    assert "V-01" in again.text
+
+
+@pytest.mark.asyncio
+async def test_a_serial_the_shop_does_not_have_is_refused(shop):
+    client = shop["client"]
+    item = await _stocked(client, "Oppo A18", ["O-01"])
+
+    response = await _sell(client, shop, item, ["O-99"])
+    assert response.status_code == 422, response.text
+    assert "O-99" in response.text
+
+
+@pytest.mark.asyncio
+async def test_cancelling_the_bill_puts_the_handset_back_on_the_shelf(shop):
+    """Left marked sold it would be stock the shop owns and cannot shift."""
+    client = shop["client"]
+    item = await _stocked(client, "Infinix Hot 40", ["I-01"])
+
+    sold = await _sell(client, shop, item, ["I-01"])
+    bill = sold.json()
+
+    cancelled = await client.post(
+        f"/vouchers/{bill['id']}/cancel", json={"reason": "Customer changed mind"}
+    )
+    assert cancelled.status_code == 200, cancelled.text
+
+    back = (await client.get("/items/serials/lookup/I-01")).json()
+    assert back["serial"]["status"] == "in_stock"
+
+    # And it can go out again, to somebody else.
+    resold = await _sell(client, shop, item, ["I-01"])
+    assert resold.status_code == 201, resold.text
+
+
+@pytest.mark.asyncio
+async def test_the_bill_remembers_which_pieces_went_out(shop):
+    client = shop["client"]
+    item = await _stocked(client, "Tecno Spark", ["T-01", "T-02"])
+
+    bill = (await _sell(client, shop, item, ["T-01", "T-02"])).json()
+    line = (await client.get(f"/vouchers/{bill['id']}")).json()["lines"][0]
+    assert sorted(line["serial_numbers"]) == ["T-01", "T-02"]

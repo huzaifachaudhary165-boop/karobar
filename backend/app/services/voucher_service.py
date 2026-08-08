@@ -28,7 +28,7 @@ from app.models.party import Party
 from app.models.voucher import Voucher, VoucherLine
 from app.schemas.voucher import VoucherCreate, VoucherLineInput, VoucherUpdate
 from app.services.base import ActorContext, BaseService, stamp_sync
-from app.services.item_service import ItemService, StockService
+from app.services.item_service import ItemService, SerialService, StockService
 from app.services.numbering_service import NumberingService
 from app.services.party_service import PartyService
 from app.utils.tax import compute_line_tax, is_interstate
@@ -61,6 +61,7 @@ class VoucherService(BaseService[Voucher]):
         self.parties = PartyService(db, actor)
         self.items = ItemService(db, actor)
         self.stock = StockService(db, actor)
+        self.serials = SerialService(db, actor)
         self.numbering = NumberingService(db, self.business_id)
         self._settings: BusinessSettings | None = None
         self._business: Business | None = None
@@ -726,6 +727,18 @@ class VoucherService(BaseService[Voucher]):
                 batch_id=line.batch_id,
                 godown_id=line.godown_id,
             )
+            # Which pieces left, not just how many. A handset sold by its IMEI
+            # that stays marked in stock can be sold again to somebody else,
+            # and when the first customer comes back with a fault the shop has
+            # no record it ever went out.
+            if outward and line.serial_numbers:
+                await self.serials.reserve_for_sale(
+                    line.item_id,
+                    list(line.serial_numbers),
+                    voucher_id=voucher.id,
+                    sale_price=line.rate,
+                )
+
             if vtype is VoucherType.SALE:
                 item.total_sold_qty = qty(item.total_sold_qty + line.qty)
                 item.total_sold_value = money(item.total_sold_value + line.total)
@@ -733,6 +746,9 @@ class VoucherService(BaseService[Voucher]):
     async def _reverse_stock(self, voucher: Voucher) -> None:
         if voucher.type_enum.affects_stock:
             await self.stock.reverse("voucher", voucher.id)
+            # The pieces come back with the stock. Left marked sold they would
+            # be unsellable for good — stock the shop owns and cannot shift.
+            await self.serials.release(voucher.id)
 
     async def _apply_ledger(self, voucher: Voucher, vtype: VoucherType, party: Party | None) -> None:
         if not vtype.affects_ledger or not party:
