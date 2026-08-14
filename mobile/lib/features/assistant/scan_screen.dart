@@ -9,6 +9,7 @@ import '../../core/router/app_router.dart';
 import '../../core/l10n/strings.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/bill_reader.dart';
+import '../../core/utils/device.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
@@ -170,6 +171,21 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Checked here rather than at each way in. The dashboard tile already
+    // asks, but the assistant's app bar and a typed-in address do not, and the
+    // reading itself runs on-device with no browser or desktop implementation
+    // at all — so this would be a screen whose only button throws.
+    if (!Device.canReadBills) {
+      return Scaffold(
+        appBar: AppBar(title: Text(context.t('Scan a bill'))),
+        body: EmptyState(
+          title: context.t('Bill reading is on the phone'),
+          message: context.t(Device.unavailableHere),
+          icon: Icons.document_scanner_outlined,
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(context.t('Scan a bill')),

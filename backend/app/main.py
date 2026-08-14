@@ -94,10 +94,20 @@ def create_app() -> FastAPI:
         contact={"name": "Karobar", "url": "https://karobar.app"},
     )
 
+    # The CORS spec forbids "*" together with credentials, and Starlette obeys
+    # it by sending no allow-origin header at all. That combination reads as a
+    # permissive config and behaves as a closed one: every request from a
+    # browser fails, and the preflight comes back 400. It is what stopped the
+    # web build talking to this API at all.
+    #
+    # Karobar authenticates with a bearer token in a header, never a cookie, so
+    # credentials buy nothing here. Dropped for the wildcard, kept when the
+    # origins are actually named — where it is both legal and meaningful.
+    allow_any_origin = "*" in settings.CORS_ORIGINS
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.CORS_ORIGINS,
-        allow_credentials=True,
+        allow_credentials=not allow_any_origin,
         allow_methods=["*"],
         allow_headers=["*"],
         expose_headers=["X-Request-Id", "X-Response-Time-Ms", "X-Pdf-Fallback"],

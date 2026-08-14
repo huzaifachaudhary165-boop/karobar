@@ -1,12 +1,15 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import 'package:sqlite3/sqlite3.dart';
-import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
+
+// Where the database actually lives depends on what is running it: a file on a
+// phone or a desktop, and SQLite compiled to WebAssembly in a browser. Nothing
+// below this line knows the difference, and nothing above it drags `dart:io`
+// into a web build — which is what stopped the app compiling for the browser
+// at all.
+import 'connection/unsupported.dart'
+    if (dart.library.io) 'connection/native.dart'
+    if (dart.library.js_interop) 'connection/web.dart';
 
 part 'app_database.g.dart';
 
@@ -45,10 +48,10 @@ class CachedResponses extends Table {
 
 @DriftDatabase(tables: [OutboxEntries, CachedResponses])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(_open());
+  AppDatabase() : super(openConnection());
 
   /// Used by tests — everything lives in memory and dies with the instance.
-  AppDatabase.memory() : super(NativeDatabase.memory());
+  AppDatabase.memory() : super(memoryConnection());
 
   @override
   int get schemaVersion => 1;
@@ -139,16 +142,3 @@ class AppDatabase extends _$AppDatabase {
   }
 }
 
-QueryExecutor _open() {
-  return LazyDatabase(() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dir.path, 'karobar.sqlite'));
-
-    // Android ships old SQLite builds; this pulls in a modern bundled one and
-    // works around a known tmpdir bug.
-    await applyWorkaroundToOpenSqlite3OnOldAndroidVersions();
-    sqlite3.tempDirectory = (await getTemporaryDirectory()).path;
-
-    return NativeDatabase.createInBackground(file);
-  });
-}

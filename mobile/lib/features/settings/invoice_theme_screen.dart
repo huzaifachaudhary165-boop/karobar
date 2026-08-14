@@ -1,12 +1,9 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../core/l10n/strings.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/share_bytes.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
 import '../../providers.dart';
@@ -102,13 +99,11 @@ class InvoiceThemeScreen extends ConsumerWidget {
   Future<void> _preview(BuildContext context, WidgetRef ref, InvoiceTheme theme) async {
     try {
       final html = await ref.read(businessRepositoryProvider).invoicePreview(theme.key);
-      final directory = await getTemporaryDirectory();
-      final file = File('${directory.path}/karobar-invoice-${theme.key}.html');
-      await file.writeAsString(html);
-
       if (!context.mounted) return;
-      await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'text/html')],
+      await shareDocument(
+        html,
+        filename: 'karobar-invoice-${theme.key}.html',
+        mimeType: 'text/html',
         subject: theme.name,
       );
     } catch (error) {

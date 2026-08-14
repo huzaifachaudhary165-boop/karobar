@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/printing/thermal_printer.dart';
 import '../../core/l10n/strings.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/device.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
 import '../../providers.dart';
@@ -44,6 +45,18 @@ class _PrintSheetState extends ConsumerState<_PrintSheet> {
   }
 
   Future<void> _load() async {
+    // Asked before anything touches the plugin. Bluetooth thermal printing is
+    // Android-only in practice, so on a computer or in a browser every call
+    // below throws a missing-plugin error — which reaches the shopkeeper as a
+    // failure with no cause and no alternative. The share sheet on the
+    // previous screen already reaches a normal printer from either.
+    if (!Device.canPrintThermal) {
+      setState(() => _problem =
+          'Receipt printing ${Device.unavailableHere.toLowerCase()} '
+          'Use Share to send the bill to a printer or on WhatsApp.');
+      return;
+    }
+
     setState(() => _busy = true);
     final store = ref.read(tokenStoreProvider);
     try {
@@ -259,6 +272,16 @@ class _LabelSheetState extends ConsumerState<_LabelSheet> {
   String? _problem;
 
   Future<void> _print() async {
+    // Same reason as the receipt sheet: the plugin is Android-only, and a
+    // missing-plugin error is not something a shopkeeper can act on. The
+    // labels screen prints a whole sheet through Share on any machine.
+    if (!Device.canPrintThermal) {
+      setState(() => _problem =
+          'Label printing ${Device.unavailableHere.toLowerCase()} '
+          'Use Stock → Barcode labels to print a sheet instead.');
+      return;
+    }
+
     setState(() {
       _busy = true;
       _problem = null;

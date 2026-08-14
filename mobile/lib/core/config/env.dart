@@ -1,4 +1,5 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
 /// Build-time configuration.
 ///
@@ -23,9 +24,17 @@ abstract final class Env {
   static const String _apiOverride = String.fromEnvironment('API_BASE_URL');
 
   /// The emulator loopback differs per platform, which is the usual first-run trap.
+  ///
+  /// Asks [kIsWeb] before the platform, because a browser reports itself as
+  /// Android on an Android phone and would then be sent to the emulator
+  /// loopback — an address that means nothing there. Every real build passes
+  /// `--dart-define=API_BASE_URL`, so this only decides where a developer's
+  /// first `flutter run` points.
   static String get apiBaseUrl {
     if (_apiOverride.isNotEmpty) return _apiOverride;
-    if (Platform.isAndroid) return 'http://10.0.2.2:8000/api/v1';
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      return 'http://10.0.2.2:8000/api/v1';
+    }
     return 'http://127.0.0.1:8000/api/v1';
   }
 

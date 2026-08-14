@@ -1,23 +1,36 @@
-import 'dart:io' show Platform;
-
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
 /// What this device can actually do.
 ///
-/// Karobar runs on a phone at the counter and on a Windows machine in the back
-/// office, and those are not the same machine. Two things genuinely do not
-/// exist on the desktop build — the camera plugins and on-device text
-/// recognition have no Windows implementation at all — so a screen that offers
-/// them there is a button that throws.
+/// Karobar runs at the counter on a phone, in the back office on Windows, and
+/// in a browser on whatever the shop already owns. Those are not the same
+/// machine. Some things genuinely do not exist off the phone — the camera
+/// plugins and on-device text recognition have no desktop or web
+/// implementation at all — so a screen that offers them there is a button that
+/// throws.
 ///
 /// Checked rather than assumed. A feature that silently does nothing is the
-/// same to a shopkeeper as a broken one, and "not on this computer, use your
-/// phone" is an answer they can act on.
+/// same to a shopkeeper as a broken one, and "not here, use your phone" is an
+/// answer they can act on.
+///
+/// Read through `defaultTargetPlatform` rather than `dart:io`, which does not
+/// exist in a browser and would stop the web build compiling at all. On the
+/// web it reports the browser's own platform — Android on an Android phone —
+/// so every check below asks [kIsWeb] first.
 abstract final class Device {
-  static bool get isMobile => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+  static bool get isWeb => kIsWeb;
+
+  static bool get isMobile =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   static bool get isDesktop =>
-      !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.linux ||
+          defaultTargetPlatform == TargetPlatform.macOS);
 
   /// Scanning a barcode needs a camera the scanner plugin can drive. It has no
   /// Windows implementation, so on the desktop this is false even on a laptop
@@ -28,15 +41,26 @@ abstract final class Device {
   /// iOS only.
   static bool get canReadBills => isMobile;
 
-  /// Speaking to the assistant needs the microphone plugin, which does have a
-  /// Windows implementation.
+  /// Speaking to the assistant needs the microphone plugin, which has a
+  /// Windows implementation but not a web one.
   static bool get canListen => !kIsWeb;
 
   /// Bluetooth thermal printing is Android-only in practice.
-  static bool get canPrintThermal => !kIsWeb && Platform.isAndroid;
+  static bool get canPrintThermal =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
   /// A one-line reason, for a screen that has to explain itself.
-  static String get unavailableHere => isDesktop
-      ? 'Not available on this computer — use the app on your phone.'
-      : 'Not available on this device.';
+  ///
+  /// Names where it *can* be done. "Nothing happened" and "not in the browser,
+  /// use the app on your phone" are the same event and completely different
+  /// answers, and only one of them is something a shopkeeper can act on.
+  static String get unavailableHere {
+    if (kIsWeb) {
+      return 'Not available in the browser — use the Karobar app on your phone.';
+    }
+    if (isDesktop) {
+      return 'Not available on this computer — use the app on your phone.';
+    }
+    return 'Not available on this device.';
+  }
 }

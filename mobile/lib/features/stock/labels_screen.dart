@@ -1,11 +1,8 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../core/l10n/strings.dart';
+import '../../core/utils/share_bytes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
@@ -271,16 +268,14 @@ class _LabelsScreenState extends ConsumerState<LabelsScreen> {
             startAt: _startAt,
           );
 
-      // Written out and shared rather than shown in-app: the share sheet is
-      // where the printer, the PDF writer and WhatsApp all already live, and a
-      // preview the shopkeeper cannot print from is not worth the screen.
-      final directory = await getTemporaryDirectory();
-      final file = File('${directory.path}/karobar-labels.html');
-      await file.writeAsString(html);
-
+      // Shared rather than shown in-app: the share sheet is where the printer,
+      // the PDF writer and WhatsApp all already live, and a preview the
+      // shopkeeper cannot print from is not worth the screen.
       if (!mounted) return;
-      await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'text/html')],
+      await shareDocument(
+        html,
+        filename: 'karobar-labels.html',
+        mimeType: 'text/html',
         subject: 'Barcode labels',
       );
     } catch (error) {
