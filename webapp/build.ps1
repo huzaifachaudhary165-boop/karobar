@@ -33,12 +33,28 @@ try {
   Pop-Location
 }
 
-# Replaced wholesale, not merged: a file dropped from the build has to
-# disappear from what is served, or the site keeps serving something the app no
-# longer knows about.
-if (Test-Path $public) { Remove-Item $public -Recurse -Force }
-New-Item -ItemType Directory -Path $public -Force | Out-Null
+# Emptied rather than deleted and recreated. A file dropped from the build has
+# to disappear from what is served, or the site keeps serving something the app
+# no longer knows about — but Windows refuses to remove a directory anything
+# has open, and a terminal left sitting in `public` is enough to stop the whole
+# build.
+if (Test-Path $public) {
+  Get-ChildItem $public -Force | Remove-Item -Recurse -Force
+} else {
+  New-Item -ItemType Directory -Path $public -Force | Out-Null
+}
 Copy-Item (Join-Path $mobile "build\web\*") $public -Recurse -Force
+
+# Symbol maps for the rendering engine, used to turn a crash address back into
+# a function name while profiling. A release build never fetches them, and at
+# 7 MB a rebuild they are the largest thing this folder would add to the
+# repository's history for no one's benefit.
+$symbols = Get-ChildItem $public -Recurse -File -Filter "*.symbols"
+if ($symbols) {
+  $freed = ($symbols | Measure-Object Length -Sum).Sum / 1MB
+  $symbols | Remove-Item -Force
+  Write-Host ("  dropped {0} engine symbol files ({1:N1} MB)" -f $symbols.Count, $freed)
+}
 
 $files = Get-ChildItem $public -Recurse -File
 Write-Host ("Ready: {0} files, {1:N1} MB in webapp\public" -f `
