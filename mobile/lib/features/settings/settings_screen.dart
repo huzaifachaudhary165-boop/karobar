@@ -7,7 +7,9 @@ import '../../core/config/env.dart';
 import '../../core/l10n/strings.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/device.dart';
 import '../../core/widgets/common.dart';
+import '../../core/widgets/get_the_app.dart';
 import '../../core/widgets/karobar_logo.dart';
 import '../../providers.dart';
 
@@ -316,6 +318,17 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
           ),
+
+          // Only renders in a browser. Somewhere permanent to find it, for
+          // anyone who did not happen to hit a phone-only feature first.
+          if (Device.isWeb) ...[
+            const SectionHeader('On your phone'),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: GetTheApp(),
+            ),
+            const SizedBox(height: 8),
+          ],
 
           const SectionHeader('About'),
           Padding(

@@ -12,6 +12,7 @@ import '../../core/utils/bill_reader.dart';
 import '../../core/utils/device.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/common.dart';
+import '../../core/widgets/get_the_app.dart';
 import '../../data/models.dart';
 import '../../providers.dart';
 
@@ -178,10 +179,21 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
     if (!Device.canReadBills) {
       return Scaffold(
         appBar: AppBar(title: Text(context.t('Scan a bill'))),
-        body: EmptyState(
-          title: context.t('Bill reading is on the phone'),
-          message: context.t(Device.unavailableHere),
-          icon: Icons.document_scanner_outlined,
+        body: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            EmptyState(
+              title: context.t('Bill reading is on the phone'),
+              message: context.t(Device.unavailableHere),
+              icon: Icons.document_scanner_outlined,
+            ),
+            // Saying what is missing and stopping there leaves a shopkeeper
+            // knowing what they cannot do and no way to get it.
+            const GetTheApp(
+              reason: 'Reading a bill from a photo runs on the phone itself — '
+                  'free, offline, and nothing leaves the device but the text.',
+            ),
+          ],
         ),
       );
     }

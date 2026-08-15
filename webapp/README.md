@@ -98,6 +98,35 @@ back to memory: the app still runs, but anything queued while offline is lost
 on refresh. The shop's own records are on the server and are never at risk. It
 says so in the browser console.
 
+## The phone app download
+
+The web app offers the Android build — in Settings, and on any screen that
+refuses because the feature is phone-only. The file is not served from here:
+it is over a hundred megabytes, and committing it beside the web build would
+add that much to the repository on every rebuild. It lives on GitHub Releases.
+
+Two files, and the app links to `releases/latest/download/`, so cutting a new
+release updates every link that has already been sent out:
+
+| File | Who it is for |
+|---|---|
+| `karobar.apk` | Every Android phone. Bigger, but cannot be picked wrong. |
+| `karobar-arm64.apk` | Phones from about 2017 on. Under half the size. |
+
+**Keep those two names.** The links are built from them, so a release that
+names them anything else breaks the download for everyone.
+
+```powershell
+cd mobile
+flutter build apk --release --split-per-abi --dart-define=API_BASE_URL=...
+flutter build apk --release --dart-define=API_BASE_URL=...
+
+copy build/app/outputs/flutter-apk/app-release.apk            karobar.apk
+copy build/app/outputs/flutter-apk/app-arm64-v8a-release.apk  karobar-arm64.apk
+
+gh release create v1.0.1 karobar.apk karobar-arm64.apk --title "Karobar 1.0.1"
+```
+
 ## First load is heavy
 
 About 11 MB the first time — the app itself plus the rendering engine — then
