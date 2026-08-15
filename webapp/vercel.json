@@ -5,22 +5,16 @@
   "installCommand": null,
   "outputDirectory": "public",
   "rewrites": [
-    {
-      "comment": "go_router puts real paths in the address bar, so a refresh on /invoices asks the server for /invoices. Vercel serves a matching file first, so this only catches the app's own routes and never the assets.",
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
     {
-      "comment": "Rebuilt on every deploy and not content-hashed. Cached, a shopkeeper keeps running last week's app and reports bugs that were fixed days ago.",
       "source": "/(index.html|flutter_bootstrap.js|flutter_service_worker.js|version.json|main.dart.js)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
       ]
     },
     {
-      "comment": "The engine and the database runtime. These change only when Flutter or drift is upgraded, and they are the heaviest thing a shop on 3G downloads — worth keeping.",
       "source": "/(canvaskit|assets)/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
@@ -33,7 +27,6 @@
       ]
     },
     {
-      "comment": "A shop's books. Nothing here should be framed by another site or sniffed into a different content type.",
       "source": "/(.*)",
       "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },

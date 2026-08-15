@@ -37,6 +37,26 @@ git push
 
 Vercel deploys on push.
 
+## What `vercel.json` is doing
+
+JSON has no comments and Vercel rejects the file outright if you invent a
+`comment` key, so the reasoning lives here.
+
+**The rewrite.** go_router puts real paths in the address bar, so refreshing on
+`/invoices` asks the server for `/invoices`, which is not a file. Everything
+falls back to `index.html`. Vercel matches a real file first, so this catches
+only the app's own routes and never an asset.
+
+**Two cache rules, because Flutter names its files two different ways.**
+`main.dart.js` and `index.html` are rebuilt on every deploy and carry no hash
+in their names, so they must revalidate — cached, a shopkeeper keeps running
+last week's app and reports bugs fixed days ago. `canvaskit/` and the two drift
+files change only when Flutter or drift is upgraded, and they are the heaviest
+thing a shop on 3G downloads, so they are kept for a year.
+
+**The security headers.** This is a shop's books. Nothing here should be framed
+by another site or sniffed into a different content type.
+
 ## Pointing it at a different backend
 
 The API address is baked in at build time.
