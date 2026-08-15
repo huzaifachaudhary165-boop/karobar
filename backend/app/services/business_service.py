@@ -19,10 +19,38 @@ from app.models.user import User
 from app.utils.phone import normalise_phone
 
 # Starter masters so a new business is usable immediately, not an empty shell.
+# What a shop is asked to pick from on the very first item it adds.
+#
+# The old list held twelve, all of them metric or retail, and a wholesaler was
+# stuck the moment they tried to enter anything real: cloth is sold by the
+# thaan, grain by the maund, timber by the cubic foot, marble by the square
+# foot, and none of those could be typed at all. A unit a business cannot name
+# is a business that cannot use the app.
+#
+# These are the ones actually spoken in Pakistani markets, English name first
+# so the app can show it and the short form so the bill stays narrow. It is a
+# starting point, not a limit — a shop adds its own from the item form, which
+# is the part that matters for the trades nobody thought of.
 DEFAULT_UNITS = [
-    ("Pieces", "Pcs"), ("Kilogram", "Kg"), ("Gram", "g"), ("Litre", "L"),
-    ("Millilitre", "ml"), ("Metre", "m"), ("Box", "Box"), ("Dozen", "Dzn"),
-    ("Packet", "Pkt"), ("Bag", "Bag"), ("Bottle", "Btl"), ("Hour", "Hr"),
+    # Counted
+    ("Pieces", "Pcs"), ("Dozen", "Dzn"), ("Pair", "Pair"), ("Set", "Set"),
+    # Weight — maund and seer are still how grain, sugar and produce are traded
+    ("Kilogram", "Kg"), ("Gram", "g"), ("Maund", "Maund"), ("Seer", "Seer"),
+    ("Ton", "Ton"), ("Quintal", "Qtl"), ("Tola", "Tola"),
+    # Volume
+    ("Litre", "L"), ("Millilitre", "ml"), ("Drum", "Drum"),
+    # Length and cloth
+    ("Metre", "m"), ("Gaz / Yard", "Gaz"), ("Foot", "Ft"),
+    ("Thaan", "Thaan"), ("Roll", "Roll"),
+    # Area and volume — timber, marble, tiles, glass
+    ("Square Foot", "Sqft"), ("Square Metre", "Sqm"),
+    ("Cubic Foot", "Cft"), ("Running Foot", "Rft"),
+    # Packing
+    ("Box", "Box"), ("Carton", "Ctn"), ("Peti", "Peti"), ("Packet", "Pkt"),
+    ("Bag", "Bag"), ("Bori", "Bori"), ("Bottle", "Btl"), ("Tin", "Tin"),
+    ("Ream", "Ream"), ("Bundle", "Bnd"),
+    # Sold as time
+    ("Hour", "Hr"), ("Day", "Day"),
 ]
 
 DEFAULT_EXPENSE_CATEGORIES = [

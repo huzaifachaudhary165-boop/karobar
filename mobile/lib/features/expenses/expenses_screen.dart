@@ -9,6 +9,7 @@ import '../../core/utils/formatters.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
 import '../../providers.dart';
+import 'expense_form_screen.dart';
 
 class ExpensesScreen extends ConsumerWidget {
   const ExpensesScreen({super.key});
@@ -221,6 +222,14 @@ class _ExpenseRow extends ConsumerWidget {
       },
       child: AppCard(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        // Swiping already deleted; there was no way to fix one. A wrong figure
+        // had to be swiped away and typed again, which put today's date on a
+        // bill paid last week.
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => ExpenseFormScreen(existing: expense),
+          ),
+        ),
         child: Row(
           children: [
             Container(

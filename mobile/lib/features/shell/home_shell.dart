@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/l10n/strings.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/screen.dart';
 import '../../core/widgets/common.dart';
 import '../../core/widgets/karobar_logo.dart';
 import '../../providers.dart';
@@ -56,6 +57,36 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     // /home?tab=1 reuses the same State, so the field never changed and every
     // dashboard tile, alert and assistant link looked like a dead button.
     final index = ref.watch(homeTabProvider).clamp(0, 3);
+
+    // A bottom bar down the full width of a desktop window puts the tabs at
+    // the furthest point from where anyone is looking, a hand's width apart.
+    // The same four destinations go down the side instead, where every other
+    // application on that screen keeps them.
+    if (context.screen.usesSideRail) {
+      return Scaffold(
+        appBar: index == 0 ? _dashboardAppBar(session) : null,
+        body: Row(
+          children: [
+            _SideRail(
+              index: index,
+              onSelect: (i) => ref.read(homeTabProvider.notifier).state = i,
+              labels: strings,
+            ),
+            const VerticalDivider(width: 1, thickness: 1),
+            // Capped rather than stretched. A bill row spread across 1900
+            // pixels puts the customer's name and the amount at opposite ends
+            // of the desk, and the eye cannot carry a row that far.
+            Expanded(
+              child: ReadableWidth(
+                maxWidth: 1200,
+                padHorizontally: false,
+                child: IndexedStack(index: index, children: _tabs),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: index == 0 ? _dashboardAppBar(session) : null,
@@ -164,6 +195,77 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The four destinations, down the side, for a window wide enough to have one.
+///
+/// The assistant keeps its raised button rather than becoming a fifth row: it
+/// is the fastest route to almost everything in the app, and demoting it to a
+/// list entry on the screen where people have the most room to work would be
+/// exactly backwards.
+class _SideRail extends StatelessWidget {
+  const _SideRail({
+    required this.index,
+    required this.onSelect,
+    required this.labels,
+  });
+
+  final int index;
+  final ValueChanged<int> onSelect;
+  final Strings labels;
+
+  @override
+  Widget build(BuildContext context) {
+    // Labels are worth the room here, and hiding them behind a hover tooltip
+    // helps nobody who is reading rather than pointing.
+    final extended = MediaQuery.sizeOf(context).width >= 1280;
+
+    return NavigationRail(
+      selectedIndex: index,
+      onDestinationSelected: onSelect,
+      extended: extended,
+      labelType: extended ? null : NavigationRailLabelType.all,
+      minWidth: 76,
+      leading: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Column(
+          children: [
+            const KarobarMark(size: 34),
+            const SizedBox(height: 14),
+            FloatingActionButton(
+              heroTag: 'assistant',
+              onPressed: () => context.goNamed(Routes.assistant),
+              shape: const CircleBorder(),
+              tooltip: labels.get('assistant'),
+              child: const Icon(Icons.auto_awesome, size: 24),
+            ),
+          ],
+        ),
+      ),
+      destinations: [
+        NavigationRailDestination(
+          icon: const Icon(Icons.dashboard_outlined),
+          selectedIcon: const Icon(Icons.dashboard),
+          label: Text(labels.get('home')),
+        ),
+        NavigationRailDestination(
+          icon: const Icon(Icons.people_outline),
+          selectedIcon: const Icon(Icons.people),
+          label: Text(labels.get('parties')),
+        ),
+        NavigationRailDestination(
+          icon: const Icon(Icons.receipt_long_outlined),
+          selectedIcon: const Icon(Icons.receipt_long),
+          label: Text(labels.get('invoices')),
+        ),
+        NavigationRailDestination(
+          icon: const Icon(Icons.inventory_2_outlined),
+          selectedIcon: const Icon(Icons.inventory_2),
+          label: Text(labels.get('items')),
+        ),
+      ],
     );
   }
 }

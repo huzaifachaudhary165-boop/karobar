@@ -756,6 +756,23 @@ class UnitService(BaseService[Unit]):
     async def create(self, data: dict[str, Any]) -> Unit:
         client_uuid = data.pop("client_uuid", None)
         data.pop("device_id", None)
+
+        # The unit list is a dropdown a shopkeeper reads at speed while adding
+        # an item. Two entries reading "Kg" is a choice with no right answer,
+        # and whichever they pick, half their stock ends up under the other.
+        short = str(data.get("short_name", "")).strip()
+        if short:
+            existing = (
+                await self.db.execute(
+                    self.base_query().where(func.lower(Unit.short_name) == short.lower())
+                )
+            ).scalar_one_or_none()
+            if existing is not None:
+                raise BusinessRuleError(
+                    f"You already have a unit called {existing.short_name}.",
+                    details={"unit_id": existing.id, "name": existing.name},
+                )
+
         row = Unit(business_id=self.business_id, **{k: v for k, v in data.items() if hasattr(Unit, k)})
         stamp_sync(row, self.actor, client_uuid=client_uuid)
         self.db.add(row)

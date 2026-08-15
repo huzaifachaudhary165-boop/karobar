@@ -33,6 +33,11 @@ class PartyDetailScreen extends ConsumerWidget {
               queryParameters: {'id': partyId},
             ),
           ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: context.t('Delete'),
+            onPressed: () => _delete(context, ref, async.valueOrNull),
+          ),
         ],
       ),
       body: async.when(
@@ -61,6 +66,57 @@ class PartyDetailScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  /// Removes a customer or supplier from the list.
+  ///
+  /// The server refuses while there are bills or payments against them, and it
+  /// is right to: deleting somebody who owes money would take the debt with
+  /// them. Its refusal is shown as it comes, because "this party has 3
+  /// invoices" tells the shopkeeper what to do next and "could not delete"
+  /// does not.
+  Future<void> _delete(BuildContext context, WidgetRef ref, Party? party) async {
+    if (party == null) return;
+
+    final owed = party.balance != 0;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.t('Delete ${party.name}?')),
+        content: Text(
+          owed
+              // Named rather than hidden. A balance is the one thing that makes
+              // this a decision instead of tidying up.
+              ? context.t('Their balance of '
+                  '${Fmt.money(party.balance.abs())} goes with them, and the '
+                  'record of what it was for goes too.')
+              : context.t('They come off your list. Anything already billed to '
+                  'them stays in your records.'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(context.t('Keep')),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(context.t('Delete')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await ref.read(partyRepositoryProvider).delete(party.id);
+      if (!context.mounted) return;
+      invalidateBusinessData(ref);
+      showSuccess(context, '${party.name} deleted.');
+      context.pop();
+    } catch (error) {
+      if (context.mounted) showError(context, error);
+    }
   }
 }
 

@@ -405,6 +405,16 @@ class VoucherRepository {
   /// The server decides what is legal — a purchase order can only become a
   /// purchase bill — so this passes the target straight through rather than
   /// second-guessing it.
+  /// Corrects a bill that is already in the books.
+  ///
+  /// The server reverses this document's stock and ledger effects before
+  /// re-applying them, so a corrected bill leaves the shop's figures as if it
+  /// had been right the first time.
+  Future<Voucher> update(String id, Map<String, dynamic> body) async {
+    final data = await _api.patch('/vouchers/$id', body: body);
+    return Voucher.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
   Future<Voucher> convert(String id, String targetType) async {
     final data = await _api.post('/vouchers/$id/convert', body: {
       'target_type': targetType,
@@ -485,6 +495,11 @@ class PaymentRepository {
     return Map<String, dynamic>.from(data as Map);
   }
 
+  Future<Payment> update(String id, Map<String, dynamic> body) async {
+    final data = await _api.patch('/payments/$id', body: body);
+    return Payment.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
   Future<void> delete(String id) => _api.delete('/payments/$id');
 
   Future<List<Map<String, dynamic>>> accounts() async {
@@ -510,6 +525,27 @@ class StockRepository {
   StockRepository(this._api);
 
   final ApiClient _api;
+
+  // ── units ──────────────────────────────────────────────────────
+  /// Cached, because the item form asks for these on every open and the list
+  /// changes about once a year.
+  Future<List<Unit>> units({void Function(List<Unit>)? onCached}) async {
+    final data = await _api.get('/items/units', onCached: _list(onCached, Unit.fromJson));
+    return _parseList(data, Unit.fromJson);
+  }
+
+  Future<Unit> createUnit({
+    required String name,
+    required String shortName,
+    bool allowDecimal = true,
+  }) async {
+    final data = await _api.post('/items/units', body: {
+      'name': name,
+      'short_name': shortName,
+      'allow_decimal': allowDecimal,
+    });
+    return Unit.fromJson(Map<String, dynamic>.from(data as Map));
+  }
 
   // ── locations ──────────────────────────────────────────────────
   Future<List<Godown>> godowns({void Function(List<Godown>)? onCached}) async {
@@ -1087,6 +1123,11 @@ class ExpenseRepository {
 
   Future<Expense> create(Map<String, dynamic> body) async {
     final data = await _api.post('/expenses', body: body);
+    return Expense.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<Expense> update(String id, Map<String, dynamic> body) async {
+    final data = await _api.patch('/expenses/$id', body: body);
     return Expense.fromJson(Map<String, dynamic>.from(data as Map));
   }
 

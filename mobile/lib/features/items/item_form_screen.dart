@@ -11,6 +11,7 @@ import '../../data/offline_write.dart';
 import '../../providers.dart';
 import '../invoices/print_sheet.dart';
 import '../stock/tracking_card.dart';
+import 'unit_field.dart';
 
 /// Create or edit an item, and adjust its stock.
 class ItemFormScreen extends ConsumerStatefulWidget {
@@ -57,7 +58,6 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
 
   bool get _isEditing => widget.itemId != null;
 
-  static const _units = ['Pcs', 'Kg', 'g', 'L', 'ml', 'Box', 'Dzn', 'Pkt', 'Bag', 'Btl', 'm', 'Hr'];
 
   @override
   void initState() {
@@ -429,14 +429,9 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _unit,
-                          decoration: const InputDecoration(labelText: 'Unit'),
-                          items: _units
-                              .map((unit) =>
-                                  DropdownMenuItem(value: unit, child: Text(unit)))
-                              .toList(),
-                          onChanged: (value) => setState(() => _unit = value ?? 'Pcs'),
+                        child: UnitField(
+                          value: _unit,
+                          onChanged: (unit) => setState(() => _unit = unit),
                         ),
                       ),
                       const SizedBox(width: 12),

@@ -72,6 +72,23 @@ class InvoiceDetailScreen extends ConsumerWidget {
                       ),
                     ),
                   ),
+                // A wrong figure has to be fixable. Without this the only way
+                // out of a typo was cancelling and typing the whole bill again
+                // under a new number — which is a different bill as far as the
+                // customer holding the old one is concerned.
+                //
+                // Not offered once it is cancelled or converted: there is
+                // nothing live left to correct, and the document it became is
+                // the one that counts.
+                if (voucher.status != 'cancelled' && !voucher.isConverted)
+                  PopupMenuItem(
+                    value: 'edit',
+                    child: ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.edit_outlined),
+                      title: Text(context.t('Edit')),
+                    ),
+                  ),
                 if (voucher.status != 'cancelled' && !voucher.isConverted)
                   const PopupMenuItem(
                     value: 'cancel',
@@ -82,6 +99,16 @@ class InvoiceDetailScreen extends ConsumerWidget {
                           style: TextStyle(color: AppColors.danger)),
                     ),
                   ),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.delete_outline,
+                        color: AppColors.danger),
+                    title: Text(context.t('Delete'),
+                        style: const TextStyle(color: AppColors.danger)),
+                  ),
+                ),
               ],
             ),
         ],
@@ -120,6 +147,57 @@ class InvoiceDetailScreen extends ConsumerWidget {
     }
 
     switch (action) {
+      case 'edit':
+        context.pushNamed(
+          Routes.invoiceForm,
+          queryParameters: {
+            'type': voucher.voucherType,
+            'edit': voucher.id,
+          },
+        );
+
+      case 'delete':
+        // Cancelling and deleting are different answers to different
+        // questions. A bill that happened and was undone stays in the books,
+        // marked cancelled, because the customer has a copy and the numbering
+        // has to stay unbroken. A bill that never should have existed — a
+        // duplicate, a test, a slip of the hand — is deleted, and saying so is
+        // the only way to tell the shopkeeper which one they are choosing.
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(context.t('Delete ${voucher.number}?')),
+            content: Text(
+              context.t('It goes for good — no record that it existed. Stock '
+                  'and the customer balance are put back.\n\nIf the bill really '
+                  'happened and was returned, cancel it instead: that keeps it '
+                  'in your records where the customer\'s copy can be matched '
+                  'against it.'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(context.t('Keep it')),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(context.t('Delete')),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true || !context.mounted) return;
+        try {
+          await ref.read(voucherRepositoryProvider).delete(voucher.id);
+          if (!context.mounted) return;
+          invalidateBusinessData(ref);
+          showSuccess(context, '${voucher.number} deleted.');
+          context.pop();
+        } catch (error) {
+          if (context.mounted) showError(context, error);
+        }
+
       case 'print':
         await showPrintSheet(context, voucher);
 

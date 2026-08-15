@@ -380,6 +380,71 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "delete_invoice",
+        "description": (
+            "Delete a bill that should never have existed — a duplicate, a test entry, "
+            "a slip of the hand. It goes for good and leaves no record. "
+            "If the sale really happened and was returned, use cancel_invoice instead: "
+            "that keeps the bill in the books so the customer's copy can be matched "
+            "against it. Always ask the user to confirm before calling this, and say "
+            "which of the two you are about to do."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "invoice_number": {"type": "string"},
+            },
+            "required": ["invoice_number"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "update_invoice",
+        "description": (
+            "Correct a bill that is already saved — a wrong quantity, rate or date. "
+            "Give only what changes; anything left out stays as it is. Lines given "
+            "replace all the lines on the bill, so include every line you want kept. "
+            "Stock and the customer balance are re-worked to match."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "invoice_number": {"type": "string"},
+                "lines": {"type": "array", "items": _LINE_SCHEMA},
+                "voucher_date": {"type": "string", "description": "YYYY-MM-DD."},
+                "notes": {"type": "string"},
+            },
+            "required": ["invoice_number"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "delete_party",
+        "description": (
+            "Remove a customer or supplier. Refused while they have bills or payments "
+            "against them. Ask the user to confirm first."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"party_name": {"type": "string"}},
+            "required": ["party_name"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "delete_item",
+        "description": (
+            "Remove an item from the shop's list. Refused while it appears on bills — "
+            "mark it inactive instead. Ask the user to confirm first."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"item_name": {"type": "string"}},
+            "required": ["item_name"],
+            "additionalProperties": False,
+        },
+    },
+    {
         "name": "update_party",
         "description": (
             "Change a party's phone, email, address or credit limit."
@@ -440,7 +505,14 @@ WRITE_TOOLS = {
     "create_party", "create_item", "create_invoice", "record_payment",
     "record_expense", "adjust_stock", "update_item_price",
     "share_invoice", "cancel_invoice", "update_party",
+    "update_invoice", "delete_invoice", "delete_party", "delete_item",
 }
+
+# Nothing here can be undone by asking again. The assistant is told to confirm
+# before calling any of them, and the app shows what happened afterwards — but
+# the real protection is that each one is refused by the service underneath
+# when the record is still referenced by something else.
+DESTRUCTIVE_TOOLS = {"delete_invoice", "delete_party", "delete_item"}
 
 TOOL_PERMISSION: dict[str, Perm] = {
     "search_parties": Perm.PARTY_READ,
@@ -460,6 +532,10 @@ TOOL_PERMISSION: dict[str, Perm] = {
     "update_item_price": Perm.ITEM_WRITE,
     "share_invoice": Perm.SALE_READ,
     "cancel_invoice": Perm.SALE_WRITE,
+    "update_invoice": Perm.SALE_WRITE,
+    "delete_invoice": Perm.SALE_DELETE,
+    "delete_party": Perm.PARTY_DELETE,
+    "delete_item": Perm.ITEM_DELETE,
     "update_party": Perm.PARTY_WRITE,
     "get_party_ledger": Perm.PARTY_READ,
     "get_profit_report": Perm.REPORT_READ,
@@ -470,6 +546,7 @@ DEEP_LINK: dict[str, str] = {
     "create_invoice": "/invoices/{id}",
     "share_invoice": "/invoices/{id}",
     "cancel_invoice": "/invoices/{id}",
+    "update_invoice": "/invoices/{id}",
     "update_party": "/parties/{id}",
     "get_party_ledger": "/parties/{id}",
     "record_payment": "/payments/{id}",
@@ -1039,7 +1116,102 @@ class ToolExecutor:
             "_entity_id": cancelled.id,
         }
 
+    async def _t_delete_invoice(self, args: dict[str, Any]) -> dict[str, Any]:
+        voucher = await self._resolve_voucher(args["invoice_number"])
+        number, total = voucher.number, voucher.total
+        await self.vouchers.delete(voucher.id)
+        return {
+            "deleted": number,
+            "total": self._fmt(total),
+            "note": (
+                "Gone for good — no record it existed. Stock and the party "
+                "balance are back where they were."
+            ),
+        }
+
+    async def _t_update_invoice(self, args: dict[str, Any]) -> dict[str, Any]:
+        from app.schemas.voucher import VoucherUpdate
+
+        voucher = await self._resolve_voucher(args["invoice_number"])
+
+        changes: dict[str, Any] = {}
+        if args.get("voucher_date"):
+            changes["voucher_date"] = date.fromisoformat(args["voucher_date"])
+        if args.get("notes") is not None:
+            changes["notes"] = args["notes"]
+        if args.get("lines"):
+            rebuilt: list[VoucherLineInput] = []
+            for raw in args["lines"]:
+                # Resolved, never created. A correction that quietly invents an
+                # item because the name was misheard makes the bill worse than
+                # it already was.
+                matches = await self.items.search_by_name(raw["item"], limit=1)
+                item = matches[0][0] if matches and matches[0][1] >= 0.85 else None
+                if item is None:
+                    raise AppError(
+                        f"No item called '{raw['item']}'. Add it first, or "
+                        "check the spelling.",
+                        code="not_found",
+                    )
+                rebuilt.append(
+                    VoucherLineInput(
+                        item_id=item.id,
+                        item_name=item.name,
+                        qty=D(raw["qty"]),
+                        rate=money(raw["rate"])
+                        if raw.get("rate") is not None
+                        else money(item.sale_price),
+                        discount_value=money(raw.get("discount_percent", 0)),
+                        tax_rate=money(raw["tax_rate"])
+                        if raw.get("tax_rate") is not None
+                        else None,
+                    )
+                )
+            changes["lines"] = rebuilt
+
+        if not changes:
+            raise AppError(
+                "Nothing to change — say what should be different about the bill.",
+                code="validation_error",
+            )
+
+        updated = await self.vouchers.update(
+            voucher.id, VoucherUpdate.model_validate(changes)
+        )
+        return {
+            "number": updated.number,
+            "party": updated.party_name,
+            "total": self._fmt(updated.total),
+            "status": updated.status,
+            "note": "Stock and the party balance were re-worked to match.",
+            "_entity_type": "voucher",
+            "_entity_id": updated.id,
+        }
+
     # ── parties ──────────────────────────────────────────────────
+    async def _t_delete_party(self, args: dict[str, Any]) -> dict[str, Any]:
+        party = await self._resolve_party(args["party_name"], create=False)
+        if party is None:
+            raise AppError(
+                f"No customer or supplier called '{args['party_name']}'.",
+                code="not_found",
+            )
+
+        name = party.name
+        await self.parties.delete(party.id)
+        return {"deleted": name, "note": "Removed from your list."}
+
+    async def _t_delete_item(self, args: dict[str, Any]) -> dict[str, Any]:
+        matches = await self.items.search_by_name(args["item_name"], limit=1)
+        if not matches or matches[0][1] < 0.85:
+            raise AppError(
+                f"No item called '{args['item_name']}'.", code="not_found"
+            )
+        item = matches[0][0]
+        name = item.name
+        await self.items.delete(item.id)
+        return {"deleted": name, "note": "Removed from your items."}
+
     async def _t_update_party(self, args: dict[str, Any]) -> dict[str, Any]:
         party = await self._resolve_party(args["party_name"], create=False)
         if party is None:

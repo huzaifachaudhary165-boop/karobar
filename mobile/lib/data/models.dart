@@ -959,6 +959,46 @@ class Insight {
 
 // ── stock depth ──────────────────────────────────────────────────
 /// A place stock physically sits: the shop, a godown, a second branch.
+/// How a shop measures what it sells.
+///
+/// Kept on the server rather than as a list in the app, because the list in the
+/// app was twelve metric and retail units and a wholesaler could not enter a
+/// single real line with it. Cloth is sold by the thaan, grain by the maund,
+/// timber by the cubic foot. A shop that cannot name its unit cannot use the
+/// app at all, and no list written here would ever have covered every trade —
+/// so the shop adds its own.
+class Unit {
+  const Unit({
+    required this.id,
+    required this.name,
+    required this.shortName,
+    this.allowDecimal = true,
+  });
+
+  final String id;
+  final String name;
+
+  /// What goes on the bill, where the column is narrow.
+  final String shortName;
+
+  /// False for things that only come whole. Half a handset is not a quantity.
+  final bool allowDecimal;
+
+  /// "Maund (Maund)" reads badly; "Kilogram (Kg)" does not.
+  String get label => name.toLowerCase() == shortName.toLowerCase()
+      ? name
+      : '$name ($shortName)';
+
+  factory Unit.fromJson(Map<String, dynamic> json) => Unit(
+        id: _str(json['id']),
+        name: _str(json['name']),
+        shortName: _str(json['short_name'], _str(json['name'])),
+        allowDecimal: json['allow_decimal'] == null
+            ? true
+            : _bool(json['allow_decimal']),
+      );
+}
+
 class Godown {
   const Godown({
     required this.id,

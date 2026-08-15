@@ -9,6 +9,7 @@ import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/document_types.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/utils/screen.dart';
 import '../../core/widgets/barcode_sheet.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
@@ -21,10 +22,29 @@ import '../stock/line_pickers.dart';
 /// Totals are computed locally for instant feedback; the server recomputes them
 /// authoritatively on save, so the two can never silently diverge.
 class InvoiceFormScreen extends ConsumerStatefulWidget {
-  const InvoiceFormScreen({super.key, this.voucherType = 'sale', this.partyId});
+  const InvoiceFormScreen({
+    super.key,
+    this.voucherType = 'sale',
+    this.partyId,
+    this.voucherId,
+  });
 
   final String voucherType;
   final String? partyId;
+
+  /// Set when an existing bill is being corrected rather than a new one made.
+  ///
+  /// A shopkeeper who keys a wrong quantity and cannot fix it is left with
+  /// wrong books, and their only way out was cancelling the bill and typing the
+  /// whole thing again under a new number — which is a different bill as far as
+  /// the customer holding the old one is concerned.
+  ///
+  /// The server reverses the stock and the ledger before re-applying them, so
+  /// an edited bill leaves the shop's figures as if it had been right the
+  /// first time.
+  final String? voucherId;
+
+  bool get isEditing => voucherId != null;
 
   @override
   ConsumerState<InvoiceFormScreen> createState() => _InvoiceFormScreenState();
@@ -122,17 +142,85 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
 
   bool get _isPurchase => _doc.isPurchase;
 
-  String get _title => _doc.newLabel;
+  String get _title => widget.isEditing ? 'Edit ${_doc.label}' : _doc.newLabel;
 
   num get _subtotal => _lines.fold<num>(0, (sum, line) => sum + line.gross);
   num get _discount => _lines.fold<num>(0, (sum, line) => sum + line.discount);
   num get _tax => _lines.fold<num>(0, (sum, line) => sum + line.tax);
   num get _total => _lines.fold<num>(0, (sum, line) => sum + line.total);
 
+  /// True while an existing bill is being read in, so the form is not shown
+  /// half-filled with a save button that would wipe what it has not loaded.
+  bool _loading = false;
+
   @override
   void initState() {
     super.initState();
-    if (widget.partyId != null) _loadParty(widget.partyId!);
+    if (widget.isEditing) {
+      _loadVoucher();
+    } else if (widget.partyId != null) {
+      _loadParty(widget.partyId!);
+    }
+  }
+
+  /// Reads an existing bill back into the form.
+  ///
+  /// Rates come back exactly as they were saved and are marked as typed by
+  /// hand, so re-quoting cannot overwrite the figures the customer already
+  /// agreed to. Correcting a quantity must not silently reprice the rest of
+  /// the bill.
+  Future<void> _loadVoucher() async {
+    setState(() => _loading = true);
+    try {
+      final voucher = await ref.read(voucherRepositoryProvider).get(widget.voucherId!);
+      final items = ref.read(itemRepositoryProvider);
+
+      final drafts = <_LineDraft>[];
+      for (final line in voucher.lines) {
+        if (line.itemId == null) continue;
+        try {
+          final item = await items.get(line.itemId!);
+          drafts.add(
+            _LineDraft(item: item, qty: line.qty, rate: line.rate, taxRate: line.taxRate)
+              ..rateEditedByHand = true
+              // Stored as an amount, edited as a percent. Recomputed off the
+              // line's own gross so the discount survives a quantity change.
+              ..discountPercent = (line.qty * line.rate) > 0
+                  ? (line.discountAmount / (line.qty * line.rate)) * 100
+                  : 0,
+          );
+        } catch (_) {
+          // The item was deleted after the bill was made. Skipping it would
+          // quietly drop a line and change the total on save.
+          if (mounted) {
+            showError(
+              context,
+              '${line.itemName} is no longer in your items, so this bill '
+              'cannot be edited. Cancel it and make a new one instead.',
+            );
+          }
+          if (mounted) context.pop();
+          return;
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _lines
+          ..clear()
+          ..addAll(drafts);
+        _date = voucher.voucherDate;
+        _notes.text = voucher.notes ?? '';
+      });
+
+      if (voucher.partyId != null) await _loadParty(voucher.partyId!);
+    } catch (error) {
+      if (!mounted) return;
+      showError(context, error);
+      context.pop();
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   /// Reacts to the route changing under a form that is already open.
@@ -397,6 +485,22 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
     };
 
     try {
+      // An edit goes straight to the server rather than into the outbox. The
+      // queue replays a create; replaying a correction against a bill whose
+      // number and figures may have moved on since is a different bill, and
+      // the shopkeeper would have no way to see which version won.
+      if (widget.isEditing) {
+        final voucher = await ref
+            .read(voucherRepositoryProvider)
+            .update(widget.voucherId!, body);
+        if (!mounted) return;
+        ref.invalidate(voucherProvider(voucher.id));
+        invalidateBusinessData(ref);
+        showSuccess(context, '${voucher.number} updated.');
+        context.pop();
+        return;
+      }
+
       final result = await saveOrQueue<Voucher>(
         ref,
         entity: 'voucher',
@@ -452,9 +556,23 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
     final symbol = ref.watch(sessionProvider).symbol;
     final theme = Theme.of(context);
 
+    // A half-read bill with a live save button would write back only the lines
+    // that had arrived, silently dropping the rest.
+    if (_loading) {
+      return Scaffold(
+        appBar: AppBar(title: Text(_title)),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(title: Text(_title)),
-      body: Column(
+      // A form one field per line down the middle of a desktop window wastes
+      // two thirds of the screen and pushes the save button off the bottom.
+      body: ReadableWidth(
+        maxWidth: 820,
+        padHorizontally: false,
+        child: Column(
         children: [
           Expanded(
             child: ListView(
@@ -730,6 +848,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
             ),
           ),
         ],
+        ),
       ),
       bottomSheet: Container(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
@@ -768,7 +887,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : const Text('Save bill'),
+                      : Text(widget.isEditing ? 'Save changes' : 'Save bill'),
                 ),
               ),
             ],

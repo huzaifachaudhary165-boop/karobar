@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/l10n/strings.dart';
 import '../../core/widgets/common.dart';
+import '../../data/models.dart';
 import '../../data/offline_write.dart';
 import '../../providers.dart';
 
@@ -12,13 +13,26 @@ import '../../providers.dart';
 /// the backend creates a category on first use, so a shopkeeper never has to set
 /// one up before recording a cost.
 class ExpenseFormScreen extends ConsumerStatefulWidget {
-  const ExpenseFormScreen({super.key, this.initialTitle, this.initialAmount});
+  const ExpenseFormScreen({
+    super.key,
+    this.initialTitle,
+    this.initialAmount,
+    this.existing,
+  });
 
   /// Filled in from a spoken command the phone understood without a signal —
   /// "bijli ka bill 3000". The shopkeeper reads it back and saves, rather than
   /// typing again what they just said.
   final String? initialTitle;
   final num? initialAmount;
+
+  /// The expense being corrected.
+  ///
+  /// A mistyped amount could only be swiped away and re-entered, which loses
+  /// the date it was actually paid and puts today's in its place.
+  final Expense? existing;
+
+  bool get isEditing => existing != null;
 
   @override
   ConsumerState<ExpenseFormScreen> createState() => _ExpenseFormScreenState();
@@ -39,6 +53,17 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   @override
   void initState() {
     super.initState();
+    final existing = widget.existing;
+    if (existing != null) {
+      _title.text = existing.title;
+      _amount.text = Fmt.qty(existing.amount);
+      _vendor.text = existing.vendorName ?? '';
+      _category = existing.categoryName;
+      _date = existing.expenseDate;
+      _paymentMode = existing.paymentMode;
+      return;
+    }
+
     if (widget.initialTitle != null) _title.text = widget.initialTitle!;
     if (widget.initialAmount != null) {
       _amount.text = widget.initialAmount!.toStringAsFixed(0);
@@ -69,6 +94,22 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     };
 
     try {
+      // A correction goes straight to the server. The outbox replays a create,
+      // so a queued edit would arrive as a second expense rather than a fix to
+      // the first, and the shop would be shown paying its electricity twice.
+      if (widget.isEditing) {
+        await ref
+            .read(expenseRepositoryProvider)
+            .update(widget.existing!.id, body);
+        if (!mounted) return;
+        ref.invalidate(expensesProvider);
+        ref.invalidate(expenseCategoriesProvider);
+        invalidateBusinessData(ref);
+        showSuccess(context, 'Expense updated.');
+        context.pop();
+        return;
+      }
+
       final result = await saveOrQueue<void>(
         ref,
         entity: 'expense',
@@ -95,7 +136,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(context.t('New expense')),
+        title: Text(context.t(widget.isEditing ? 'Edit expense' : 'New expense')),
         actions: [
           TextButton(onPressed: _busy ? null : _save, child: Text(context.t('Save'))),
         ],

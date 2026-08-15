@@ -260,8 +260,131 @@ class _PaymentRow extends ConsumerWidget {
                 ),
             ],
           ),
+          // A receipt keyed for the wrong amount had no way back at all — not
+          // an edit, not even a delete. The shopkeeper's books said they had
+          // been paid something they had not.
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, size: 18),
+            tooltip: context.t('More'),
+            onSelected: (action) => _onAction(context, ref, action),
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'edit',
+                child: ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.edit_outlined),
+                  title: Text(context.t('Change amount')),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'delete',
+                child: ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.delete_outline, color: AppColors.danger),
+                  title: Text(context.t('Delete'),
+                      style: const TextStyle(color: AppColors.danger)),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _onAction(BuildContext context, WidgetRef ref, String action) async {
+    if (action == 'edit') {
+      await _edit(context, ref);
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.t('Delete ${payment.number}?')),
+        content: Text(
+          context.t('The bills it paid go back to unpaid, and '
+              '${payment.partyName ?? 'the customer'}\'s balance goes back to '
+              'what it was.'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(context.t('Keep it')),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(context.t('Delete')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await ref.read(paymentRepositoryProvider).delete(payment.id);
+      if (!context.mounted) return;
+      ref.invalidate(paymentsProvider);
+      invalidateBusinessData(ref);
+      showSuccess(context, '${payment.number} deleted.');
+    } catch (error) {
+      if (context.mounted) showError(context, error);
+    }
+  }
+
+  /// Only the amount.
+  ///
+  /// Which bills it settled, and in what order, is the server's arithmetic —
+  /// re-doing that from a list on a phone is how a payment ends up allocated
+  /// twice. Changing the figure is the correction people actually need, and
+  /// the server re-spreads it across the same bills.
+  Future<void> _edit(BuildContext context, WidgetRef ref) async {
+    final controller = TextEditingController(text: Fmt.qty(payment.amount));
+
+    final amount = await showDialog<num>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.t('Change ${payment.number}')),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            labelText: context.t('Amount'),
+            prefixText: symbol,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(context.t('Cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(
+              dialogContext,
+              num.tryParse(controller.text.trim()),
+            ),
+            child: Text(context.t('Save')),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    if (amount == null || amount <= 0 || !context.mounted) return;
+    if (amount == payment.amount) return;
+
+    try {
+      await ref
+          .read(paymentRepositoryProvider)
+          .update(payment.id, {'amount': amount});
+      if (!context.mounted) return;
+      ref.invalidate(paymentsProvider);
+      invalidateBusinessData(ref);
+      showSuccess(context, '${payment.number} updated.');
+    } catch (error) {
+      if (context.mounted) showError(context, error);
+    }
   }
 }

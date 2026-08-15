@@ -549,6 +549,15 @@ final expenseCategoriesProvider =
 });
 
 // ── stock depth: locations, batches, serials ─────────────────────
+/// How this shop measures things.
+///
+/// Not autoDispose: the item form asks on every open, and a dropdown that
+/// blanks for a moment each time is a dropdown people mistrust.
+final unitsProvider = StreamProvider<List<Unit>>((ref) {
+  final repository = ref.watch(stockRepositoryProvider);
+  return _cachedThenFresh<List<Unit>>((emit) => repository.units(onCached: emit));
+});
+
 final godownsProvider = StreamProvider.autoDispose<List<Godown>>((ref) {
   final repository = ref.watch(stockRepositoryProvider);
   return _cachedThenFresh<List<Godown>>((emit) => repository.godowns(onCached: emit));

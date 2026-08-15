@@ -202,6 +202,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, state) => InvoiceFormScreen(
               voucherType: state.uri.queryParameters['type'] ?? 'sale',
               partyId: state.uri.queryParameters['party'],
+              // Correcting an existing bill rather than making a new one. Same
+              // screen, because the fields are the same and a second one would
+              // be a second place for them to drift apart.
+              voucherId: state.uri.queryParameters['edit'],
             ),
           ),
           GoRoute(
