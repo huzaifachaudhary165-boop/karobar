@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../l10n/strings.dart';
+import '../utils/screen.dart';
 import '../../features/assistant/assistant_screen.dart';
 import '../../features/assistant/scan_screen.dart';
 import '../../features/auth/forgot_password_screen.dart';
@@ -146,27 +147,27 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/',
         name: Routes.splash,
-        builder: (_, __) => const SplashScreen(),
+        builder: (_, __) => const DesktopFrame(child: SplashScreen()),
       ),
       GoRoute(
         path: '/onboarding',
         name: Routes.onboarding,
-        builder: (_, __) => const OnboardingScreen(),
+        builder: (_, __) => const DesktopFrame(child: OnboardingScreen()),
       ),
       GoRoute(
         path: '/login',
         name: Routes.login,
-        builder: (_, __) => const LoginScreen(),
+        builder: (_, __) => const DesktopFrame(child: LoginScreen()),
       ),
       GoRoute(
         path: '/register',
         name: Routes.register,
-        builder: (_, __) => const RegisterScreen(),
+        builder: (_, __) => const DesktopFrame(child: RegisterScreen()),
       ),
       GoRoute(
         path: '/forgot-password',
         name: Routes.forgotPassword,
-        builder: (_, __) => const ForgotPasswordScreen(),
+        builder: (_, __) => const DesktopFrame(child: ForgotPasswordScreen()),
       ),
       GoRoute(
         path: '/home',
@@ -178,157 +179,157 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'parties/new',
             name: Routes.partyForm,
-            builder: (_, state) => PartyFormScreen(
+            builder: (_, state) => DesktopFrame(child: PartyFormScreen(
               partyId: state.uri.queryParameters['id'],
-              initialType: state.uri.queryParameters['type'] ?? 'customer',
+              initialType: state.uri.queryParameters['type'] ?? 'customer'),
             ),
           ),
           GoRoute(
             path: 'parties/:id',
             name: Routes.partyDetail,
-            builder: (_, state) => PartyDetailScreen(partyId: state.pathParameters['id']!),
+            builder: (_, state) => DesktopFrame(child: PartyDetailScreen(partyId: state.pathParameters['id']!)),
           ),
           GoRoute(
             path: 'items/new',
             name: Routes.itemForm,
-            builder: (_, state) => ItemFormScreen(
+            builder: (_, state) => DesktopFrame(child: ItemFormScreen(
               itemId: state.uri.queryParameters['id'],
-              initialBarcode: state.uri.queryParameters['barcode'],
+              initialBarcode: state.uri.queryParameters['barcode']),
             ),
           ),
           GoRoute(
             path: 'invoices/new',
             name: Routes.invoiceForm,
-            builder: (_, state) => InvoiceFormScreen(
+            builder: (_, state) => DesktopFrame(child: InvoiceFormScreen(
               voucherType: state.uri.queryParameters['type'] ?? 'sale',
               partyId: state.uri.queryParameters['party'],
               // Correcting an existing bill rather than making a new one. Same
               // screen, because the fields are the same and a second one would
               // be a second place for them to drift apart.
-              voucherId: state.uri.queryParameters['edit'],
+              voucherId: state.uri.queryParameters['edit']),
             ),
           ),
           GoRoute(
             path: 'invoices/:id',
             name: Routes.invoiceDetail,
             builder: (_, state) =>
-                InvoiceDetailScreen(voucherId: state.pathParameters['id']!),
+                DesktopFrame(child: InvoiceDetailScreen(voucherId: state.pathParameters['id']!)),
           ),
           GoRoute(
             path: 'scan',
             name: Routes.scan,
-            builder: (_, __) => const ScanScreen(),
+            builder: (_, __) => const DesktopFrame(child: ScanScreen()),
           ),
           GoRoute(
             path: 'reports',
             name: Routes.reports,
-            builder: (_, __) => const ReportsScreen(),
+            builder: (_, __) => const DesktopFrame(child: ReportsScreen()),
           ),
           GoRoute(
             path: 'settings',
             name: Routes.settings,
-            builder: (_, __) => const SettingsScreen(),
+            builder: (_, __) => const DesktopFrame(child: SettingsScreen()),
           ),
           GoRoute(
             path: 'settings/business',
             name: Routes.businessSettings,
-            builder: (_, __) => const BusinessSettingsScreen(),
+            builder: (_, __) => const DesktopFrame(child: BusinessSettingsScreen()),
           ),
           GoRoute(
             path: 'settings/team',
             name: Routes.team,
-            builder: (_, __) => const TeamScreen(),
+            builder: (_, __) => const DesktopFrame(child: TeamScreen()),
           ),
           GoRoute(
             path: 'settings/invoice-look',
             name: Routes.invoiceTheme,
-            builder: (_, __) => const InvoiceThemeScreen(),
+            builder: (_, __) => const DesktopFrame(child: InvoiceThemeScreen()),
           ),
           GoRoute(
             path: 'settings/data',
             name: Routes.data,
-            builder: (_, __) => const DataScreen(),
+            builder: (_, __) => const DesktopFrame(child: DataScreen()),
           ),
           GoRoute(
             path: 'expenses',
             name: Routes.expenses,
-            builder: (_, __) => const ExpensesScreen(),
+            builder: (_, __) => const DesktopFrame(child: ExpensesScreen()),
           ),
           GoRoute(
             path: 'expenses/new',
             name: Routes.expenseForm,
-            builder: (_, __) => const ExpenseFormScreen(),
+            builder: (_, __) => const DesktopFrame(child: ExpenseFormScreen()),
           ),
           GoRoute(
             path: 'payments',
             name: Routes.payments,
-            builder: (_, __) => const PaymentsScreen(),
+            builder: (_, __) => const DesktopFrame(child: PaymentsScreen()),
           ),
           GoRoute(
             path: 'stock/locations',
             name: Routes.godowns,
-            builder: (_, __) => const GodownsScreen(),
+            builder: (_, __) => const DesktopFrame(child: GodownsScreen()),
           ),
           GoRoute(
             path: 'stock/expiry',
             name: Routes.expiry,
-            builder: (_, __) => const ExpiryScreen(),
+            builder: (_, __) => const DesktopFrame(child: ExpiryScreen()),
           ),
           GoRoute(
             path: 'stock/labels',
             name: Routes.labels,
-            builder: (_, __) => const LabelsScreen(),
+            builder: (_, __) => const DesktopFrame(child: LabelsScreen()),
           ),
           GoRoute(
             path: 'pricing',
             name: Routes.pricing,
-            builder: (_, __) => const PricingScreen(),
+            builder: (_, __) => const DesktopFrame(child: PricingScreen()),
           ),
           GoRoute(
             path: 'recurring',
             name: Routes.recurring,
-            builder: (_, __) => const RecurringScreen(),
+            builder: (_, __) => const DesktopFrame(child: RecurringScreen()),
           ),
           GoRoute(
             path: 'tax',
             name: Routes.tax,
-            builder: (_, __) => const TaxScreen(),
+            builder: (_, __) => const DesktopFrame(child: TaxScreen()),
           ),
           GoRoute(
             path: 'loyalty',
             name: Routes.loyalty,
-            builder: (_, __) => const LoyaltyScreen(),
+            builder: (_, __) => const DesktopFrame(child: LoyaltyScreen()),
           ),
           GoRoute(
             path: 'manufacturing',
             name: Routes.manufacturing,
-            builder: (_, __) => const ManufacturingScreen(),
+            builder: (_, __) => const DesktopFrame(child: ManufacturingScreen()),
           ),
           GoRoute(
             path: 'accounts',
             name: Routes.accounts,
-            builder: (_, __) => const AccountsScreen(),
+            builder: (_, __) => const DesktopFrame(child: AccountsScreen()),
           ),
           GoRoute(
             path: 'cheques',
             name: Routes.cheques,
-            builder: (_, __) => const ChequesScreen(),
+            builder: (_, __) => const DesktopFrame(child: ChequesScreen()),
           ),
           GoRoute(
             path: 'loans',
             name: Routes.loans,
-            builder: (_, __) => const LoansScreen(),
+            builder: (_, __) => const DesktopFrame(child: LoansScreen()),
           ),
           GoRoute(
             path: 'notifications',
             name: Routes.notifications,
-            builder: (_, __) => const NotificationsScreen(),
+            builder: (_, __) => const DesktopFrame(child: NotificationsScreen()),
           ),
           GoRoute(
             path: 'assistant',
             name: Routes.assistant,
-            builder: (_, state) => AssistantScreen(
-              initialPrompt: state.uri.queryParameters['q'],
+            builder: (_, state) => DesktopFrame(child: AssistantScreen(
+              initialPrompt: state.uri.queryParameters['q']),
             ),
           ),
         ],

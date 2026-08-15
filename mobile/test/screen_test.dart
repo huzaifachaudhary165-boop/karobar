@@ -139,6 +139,36 @@ void main() {
     });
   });
 
+  group('a whole screen on a wide display', () {
+    testWidgets('is held to a column and centred', (tester) async {
+      // The onboarding cards were drawn 1600 pixels wide: a language label at
+      // the far left with nothing else on the line, and a Next button running
+      // the length of the desk.
+      await at(
+        tester,
+        1600,
+        const DesktopFrame(
+          maxWidth: 1040,
+          child: SizedBox(key: ValueKey('s'), width: double.infinity, height: 10),
+        ),
+      );
+
+      expect(tester.getSize(find.byKey(const ValueKey('s'))).width, 1040);
+    });
+
+    testWidgets('a phone is left exactly as it was', (tester) async {
+      await at(
+        tester,
+        390,
+        const DesktopFrame(
+          child: SizedBox(key: ValueKey('s'), width: double.infinity, height: 10),
+        ),
+      );
+
+      expect(tester.getSize(find.byKey(const ValueKey('s'))).width, 390);
+    });
+  });
+
   group('fields side by side', () {
     const a = SizedBox(key: ValueKey('a'), height: 10);
     const b = SizedBox(key: ValueKey('b'), height: 10);

@@ -110,6 +110,46 @@ class ReadableWidth extends StatelessWidget {
   }
 }
 
+/// Holds a whole screen to a readable column on a wide display.
+///
+/// [ReadableWidth] caps a screen's *body*, which is right where a scaffold has
+/// a navigation rail beside it. Everything else — the sign-in flow, a form
+/// pushed on top, a detail page — is a single column from top to bottom, and on
+/// a 1600-pixel window it was drawn 1600 pixels wide: a language card with its
+/// label at the far left and nothing else on the line, a Next button running
+/// the length of the desk.
+///
+/// The app bar is capped along with it, deliberately. A full-bleed bar over a
+/// narrow column reads as a window that failed to load rather than a page.
+class DesktopFrame extends StatelessWidget {
+  const DesktopFrame({super.key, required this.child, this.maxWidth = 1040});
+
+  final Widget child;
+  final double maxWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final available = constraints.maxWidth;
+        if (!available.isFinite || available <= maxWidth) return child;
+
+        // The page's own background continues past the column, so the frame
+        // reads as margin rather than as a card floating on nothing.
+        return ColoredBox(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxWidth),
+              child: child,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// Lays fields out side by side when there is room, and stacked when there is
 /// not.
 ///
