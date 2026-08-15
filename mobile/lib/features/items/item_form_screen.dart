@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/network/api_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/l10n/strings.dart';
 import '../../core/utils/formatters.dart';
@@ -278,6 +279,41 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
     }
   }
 
+  /// Offers the one thing that will actually work, and does it on a tap.
+  ///
+  /// A retired item comes off the item list and out of the bill picker, but
+  /// every bill it already appears on keeps it — which is the whole reason the
+  /// server would not delete it.
+  Future<void> _offerToRetire(Object usageCount) async {
+    final name = _name.text.trim();
+    final retire = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.t('$name is on $usageCount bill'
+            '${usageCount == 1 ? '' : 's'}')),
+        content: Text(
+          context.t('It cannot be deleted without changing what those bills '
+              'say. Retiring it takes it off your item list and off new bills, '
+              'and leaves the old ones exactly as they are.'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(context.t('Leave it')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(context.t('Retire it')),
+          ),
+        ],
+      ),
+    );
+    if (retire != true || !mounted) return;
+
+    setState(() => _isActive = false);
+    await _save();
+  }
+
   Future<void> _delete() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -307,6 +343,19 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
       invalidateBusinessData(ref);
       showSuccess(context, 'Item deleted.');
       context.pop();
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      // The server refuses an item that appears on past bills, and tells the
+      // shopkeeper to retire it instead. Saying that and then leaving them to
+      // find a switch further down the form is telling somebody the answer and
+      // walking away — so the answer is offered here, where the question was
+      // asked.
+      final used = error.details['usage_count'];
+      if (used != null) {
+        await _offerToRetire(used);
+        return;
+      }
+      showError(context, error);
     } catch (error) {
       if (mounted) showError(context, error);
     }

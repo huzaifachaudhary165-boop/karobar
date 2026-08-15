@@ -17,6 +17,7 @@ from app.schemas.item import (
     BarcodeSuggestion, BatchAllocation, BatchCreate, BatchOut, BatchUpdate, CategoryCreate,
     CategoryOut, ExpiringBatch, GodownCreate, GodownOut, GodownStockRow, GodownUpdate,
     ItemCreate, ItemGodownRow, ItemListItem, ItemOut, ItemUpdate, LabelSheetRequest,
+    UnitUpdate,
     LabelSizeOut, SerialAdd, SerialAddResult, SerialLookupOut, SerialOut,
     StockAdjustment, StockLedgerOut, StockSummary, StockTransfer, TransferResult,
     UnitCreate, UnitOut,
@@ -173,6 +174,30 @@ async def create_unit(payload: UnitCreate, tenant: Tenant, db: DbSession) -> Uni
     tenant.require(Perm.ITEM_WRITE)
     row = await UnitService(db, tenant.actor).create(payload.model_dump(exclude_unset=True))
     return UnitOut.model_validate(row)
+
+
+@router.patch("/units/{unit_id}", response_model=UnitOut, summary="Rename a unit")
+async def update_unit(
+    unit_id: str, payload: UnitUpdate, tenant: Tenant, db: DbSession
+) -> UnitOut:
+    """A unit added with a typo was in the dropdown for good."""
+    tenant.require(Perm.ITEM_WRITE)
+    row = await UnitService(db, tenant.actor).update(
+        unit_id, payload.model_dump(exclude_unset=True)
+    )
+    return UnitOut.model_validate(row)
+
+
+@router.delete("/units/{unit_id}", response_model=Message, summary="Remove a unit")
+async def delete_unit(unit_id: str, tenant: Tenant, db: DbSession) -> Message:
+    """Refused while items are still measured in it.
+
+    A unit is not a label on the item — it *is* how the quantity is read. Taking
+    one away while stock is counted in it leaves figures nobody can interpret.
+    """
+    tenant.require(Perm.ITEM_DELETE)
+    await UnitService(db, tenant.actor).delete_unit(unit_id)
+    return Message(message="Unit removed.")
 
 
 # ── barcode labels ─────────────────────────────────────────────────

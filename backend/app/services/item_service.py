@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.barcodes import next_ean13
@@ -106,13 +106,23 @@ class ItemService(BaseService[Item]):
         return item
 
     async def delete(self, item_id: str) -> None:
-        from app.models.voucher import VoucherLine  # local import avoids a cycle
+        from app.models.voucher import Voucher, VoucherLine  # local import avoids a cycle
 
         item = await self.get_or_404(item_id)
+
+        # Only lines on bills that still exist. The count used to include every
+        # line ever written, so an item whose only bill had since been deleted
+        # was refused for appearing on a transaction the shopkeeper could no
+        # longer find anywhere in the app — an argument they had no way to win.
         used = (
             await self.db.execute(
-                select(func.count()).select_from(VoucherLine).where(
-                    VoucherLine.business_id == self.business_id, VoucherLine.item_id == item_id
+                select(func.count())
+                .select_from(VoucherLine)
+                .join(Voucher, Voucher.id == VoucherLine.voucher_id)
+                .where(
+                    VoucherLine.business_id == self.business_id,
+                    VoucherLine.item_id == item_id,
+                    Voucher.is_deleted.is_(False),
                 )
             )
         ).scalar_one()
@@ -782,6 +792,69 @@ class UnitService(BaseService[Unit]):
 
     async def list_all(self) -> list[Unit]:
         return list((await self.db.execute(self.base_query().order_by(Unit.name))).scalars().all())
+
+    async def update(self, unit_id: str, data: dict[str, Any]) -> Unit:
+        row = await self.get_or_404(unit_id)
+
+        short = str(data.get("short_name", "")).strip()
+        if short and short.lower() != row.short_name.lower():
+            clash = (
+                await self.db.execute(
+                    self.base_query().where(
+                        func.lower(Unit.short_name) == short.lower(),
+                        Unit.id != unit_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if clash is not None:
+                raise BusinessRuleError(
+                    f"You already have a unit called {clash.short_name}.",
+                    details={"unit_id": clash.id},
+                )
+
+        old_short = row.short_name
+        changes = self.apply_fields(row, data)
+        row.bump_revision()
+
+        # An item stores its unit as text, so renaming the unit without
+        # carrying the items across would leave them measured in something the
+        # shop no longer has — and the dropdown would silently reset them the
+        # next time anybody opened the form.
+        if short and short != old_short:
+            await self.db.execute(
+                update(Item)
+                .where(Item.business_id == self.business_id, Item.unit_label == old_short)
+                .values(unit_label=short)
+            )
+
+        await self.db.flush()
+        await self.track("update", row, changes=changes, label=row.name)
+        return row
+
+    async def delete_unit(self, unit_id: str) -> None:
+        row = await self.get_or_404(unit_id)
+
+        in_use = (
+            await self.db.execute(
+                select(func.count())
+                .select_from(Item)
+                .where(
+                    Item.business_id == self.business_id,
+                    Item.is_deleted.is_(False),
+                    Item.unit_label == row.short_name,
+                )
+            )
+        ).scalar_one()
+
+        if in_use:
+            raise BusinessRuleError(
+                f"{in_use} item{'s' if in_use != 1 else ''} "
+                f"{'are' if in_use != 1 else 'is'} measured in {row.short_name}. "
+                "Change those first, or rename this unit instead.",
+                details={"unit_id": unit_id, "items": in_use},
+            )
+
+        await self.soft_delete(row, label=row.name)
 
 
 class GodownService(BaseService[Godown]):

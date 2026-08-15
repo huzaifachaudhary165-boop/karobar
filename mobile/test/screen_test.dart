@@ -97,6 +97,31 @@ void main() {
       expect(tester.getSize(find.byKey(const ValueKey('c'))).width, 390);
     });
 
+    testWidgets('it measures the room it has, not the size of the window',
+        (tester) async {
+      // Inside the shell a navigation rail has already taken its share. Reading
+      // the window instead would treat a narrow column as a wide one and pad a
+      // layout that was never wide enough to need it.
+      await at(
+        tester,
+        1600,
+        const Row(
+          children: [
+            SizedBox(width: 1200),          // something else took this
+            Expanded(
+              child: ReadableWidth(
+                maxWidth: 900,
+                child: SizedBox(key: ValueKey('c'), width: double.infinity, height: 10),
+              ),
+            ),
+          ],
+        ),
+      );
+
+      // 400 left, which is under the cap — so nothing is taken away.
+      expect(tester.getSize(find.byKey(const ValueKey('c'))).width, 400);
+    });
+
     testWidgets('a wide window is capped and centred', (tester) async {
       await at(
         tester,

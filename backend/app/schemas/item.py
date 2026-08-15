@@ -196,6 +196,12 @@ class UnitCreate(InputModel, SyncFields):
     allow_decimal: bool = True
 
 
+class UnitUpdate(InputModel):
+    name: str | None = Field(default=None, min_length=1, max_length=60)
+    short_name: str | None = Field(default=None, min_length=1, max_length=16)
+    allow_decimal: bool | None = None
+
+
 class UnitOut(ORMModel):
     id: str
     name: str

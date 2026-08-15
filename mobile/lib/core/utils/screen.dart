@@ -84,20 +84,28 @@ class ReadableWidth extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
-    if (width <= maxWidth) return child;
+    // The room this widget actually has, not the width of the window. Inside
+    // the shell a navigation rail has already taken its share, and measuring
+    // the window would add padding to a column that was never wide enough to
+    // need it.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final available = constraints.maxWidth;
+        if (!available.isFinite || available <= maxWidth) return child;
 
-    return Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxWidth),
-        child: padHorizontally
-            ? Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: child,
-              )
-            : child,
-      ),
+        return Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            child: padHorizontally
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: child,
+                  )
+                : child,
+          ),
+        );
+      },
     );
   }
 }

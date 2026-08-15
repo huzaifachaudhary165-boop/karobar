@@ -218,30 +218,28 @@ class _SideRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Labels are worth the room here, and hiding them behind a hover tooltip
-    // helps nobody who is reading rather than pointing.
-    final extended = MediaQuery.sizeOf(context).width >= 1280;
-
+    // Deliberately not extended. An extended rail is 250-odd pixels of mostly
+    // empty space for four destinations, and it was the first thing that
+    // looked wrong on a real screen. Icon over label is the compact form, and
+    // it reads at a glance without eating a seventh of the window.
+    //
+    // No logo either: the app bar already carries the shop's name and mark
+    // directly above this, and two of them a centimetre apart is one too many.
     return NavigationRail(
       selectedIndex: index,
       onDestinationSelected: onSelect,
-      extended: extended,
-      labelType: extended ? null : NavigationRailLabelType.all,
-      minWidth: 76,
+      labelType: NavigationRailLabelType.all,
+      minWidth: 84,
+      groupAlignment: -0.9,
       leading: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        child: Column(
-          children: [
-            const KarobarMark(size: 34),
-            const SizedBox(height: 14),
-            FloatingActionButton(
-              heroTag: 'assistant',
-              onPressed: () => context.goNamed(Routes.assistant),
-              shape: const CircleBorder(),
-              tooltip: labels.get('assistant'),
-              child: const Icon(Icons.auto_awesome, size: 24),
-            ),
-          ],
+        padding: const EdgeInsets.only(top: 12, bottom: 6),
+        child: FloatingActionButton.small(
+          heroTag: 'assistant',
+          onPressed: () => context.goNamed(Routes.assistant),
+          shape: const CircleBorder(),
+          elevation: 1,
+          tooltip: labels.get('assistant'),
+          child: const Icon(Icons.auto_awesome, size: 20),
         ),
       ),
       destinations: [

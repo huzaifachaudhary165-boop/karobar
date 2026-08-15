@@ -547,6 +547,18 @@ class StockRepository {
     return Unit.fromJson(Map<String, dynamic>.from(data as Map));
   }
 
+  /// Fixes a unit that was added with a typo.
+  ///
+  /// The server carries every item measured in it across to the new name, so
+  /// this is a rename rather than a replacement.
+  Future<Unit> updateUnit(String id, Map<String, dynamic> body) async {
+    final data = await _api.patch('/items/units/$id', body: body);
+    return Unit.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  /// Refused by the server while items are still measured in it.
+  Future<void> deleteUnit(String id) => _api.delete('/items/units/$id');
+
   // ── locations ──────────────────────────────────────────────────
   Future<List<Godown>> godowns({void Function(List<Godown>)? onCached}) async {
     final data = await _api.get('/items/godowns', onCached: _list(onCached, Godown.fromJson));

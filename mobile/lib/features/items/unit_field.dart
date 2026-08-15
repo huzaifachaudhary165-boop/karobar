@@ -23,6 +23,7 @@ class UnitField extends ConsumerWidget {
   final ValueChanged<String> onChanged;
 
   static const _addNew = '__add__';
+  static const _manage = '__manage__';
 
   Future<void> _add(BuildContext context, WidgetRef ref) async {
     final created = await showModalBottomSheet<Unit>(
@@ -31,6 +32,14 @@ class UnitField extends ConsumerWidget {
       builder: (_) => const _NewUnitSheet(),
     );
     if (created != null) onChanged(created.shortName);
+  }
+
+  Future<void> _manageUnits(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => const _ManageUnitsSheet(),
+    );
   }
 
   @override
@@ -80,6 +89,18 @@ class UnitField extends ConsumerWidget {
             ],
           ),
         ),
+        // A unit added with a typo used to be in this list for good.
+        if (units.isNotEmpty)
+          DropdownMenuItem(
+            value: _manage,
+            child: Row(
+              children: [
+                const Icon(Icons.tune, size: 18),
+                const SizedBox(width: 8),
+                Text(context.t('Fix or remove units')),
+              ],
+            ),
+          ),
       ],
       onChanged: (picked) {
         if (picked == null) return;
@@ -87,8 +108,154 @@ class UnitField extends ConsumerWidget {
           _add(context, ref);
           return;
         }
+        if (picked == _manage) {
+          _manageUnits(context);
+          return;
+        }
         onChanged(picked);
       },
+    );
+  }
+}
+
+/// The shop's units, with a way to fix or drop one.
+///
+/// Adding was possible from the first day; correcting was not. A unit typed as
+/// "Peice" sat in the dropdown for good, and the only way past it was to pick
+/// it anyway.
+class _ManageUnitsSheet extends ConsumerWidget {
+  const _ManageUnitsSheet();
+
+  Future<void> _rename(BuildContext context, WidgetRef ref, Unit unit) async {
+    final name = TextEditingController(text: unit.name);
+    final short = TextEditingController(text: unit.shortName);
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.t('Fix ${unit.shortName}')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: name,
+              autofocus: true,
+              decoration: InputDecoration(labelText: context.t('Full name')),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: short,
+              maxLength: 16,
+              decoration: InputDecoration(
+                labelText: context.t('Short form'),
+                helperText: context.t('Items using it move across too'),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(context.t('Cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(context.t('Save')),
+          ),
+        ],
+      ),
+    );
+
+    final newName = name.text.trim();
+    final newShort = short.text.trim();
+    name.dispose();
+    short.dispose();
+
+    if (saved != true || !context.mounted) return;
+    if (newName.isEmpty || newShort.isEmpty) return;
+
+    try {
+      await ref.read(stockRepositoryProvider).updateUnit(unit.id, {
+        'name': newName,
+        'short_name': newShort,
+      });
+      ref.invalidate(unitsProvider);
+      // Items moved with it, so anything showing the old label is now wrong.
+      invalidateBusinessData(ref);
+      if (context.mounted) showSuccess(context, 'Unit updated.');
+    } catch (error) {
+      if (context.mounted) showError(context, error);
+    }
+  }
+
+  Future<void> _remove(BuildContext context, WidgetRef ref, Unit unit) async {
+    try {
+      await ref.read(stockRepositoryProvider).deleteUnit(unit.id);
+      ref.invalidate(unitsProvider);
+      if (context.mounted) showSuccess(context, '${unit.shortName} removed.');
+    } catch (error) {
+      // The server refuses while items are measured in it, and says how many.
+      // That message is the useful one.
+      if (context.mounted) showError(context, error);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final units = ref.watch(unitsProvider).valueOrNull ?? const <Unit>[];
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(context.t('Your units'), style: theme.textTheme.titleMedium),
+            const SizedBox(height: 2),
+            Text(
+              context.t('Renaming one moves every item measured in it. One '
+                  'still in use cannot be removed.'),
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.5,
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: units.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final unit = units[index];
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: Text(unit.label),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined, size: 18),
+                          tooltip: context.t('Fix'),
+                          onPressed: () => _rename(context, ref, unit),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          tooltip: context.t('Remove'),
+                          onPressed: () => _remove(context, ref, unit),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
