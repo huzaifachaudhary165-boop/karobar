@@ -194,6 +194,10 @@ class PartyRepository {
     String? partyType,
     bool onlyReceivable = false,
     bool onlyPayable = false,
+    /// False lists the ones hidden from the main list. Hiding somebody has to
+    /// be undoable, or their name is gone from the app while their bills still
+    /// carry it.
+    bool? isActive = true,
     void Function(Paged<Party>)? onCached,
   }) async {
     final data = await _api.get('/parties',
@@ -202,6 +206,7 @@ class PartyRepository {
       'size': size,
       'search': search,
       'party_type': partyType,
+      if (isActive != null) 'is_active': isActive,
       if (onlyReceivable) 'only_receivable': true,
       if (onlyPayable) 'only_payable': true,
       'sort': 'name',
@@ -427,7 +432,13 @@ class VoucherRepository {
     return Voucher.fromJson(Map<String, dynamic>.from(data as Map));
   }
 
-  Future<void> delete(String id) => _api.delete('/vouchers/$id');
+  /// [releasePayments] deletes a bill that money has come in against.
+  ///
+  /// The payments are kept — the shop received that cash — and go back to the
+  /// party's account as an advance to put against the next bill.
+  Future<void> delete(String id, {bool releasePayments = false}) => _api.delete(
+        '/vouchers/$id${releasePayments ? '?release_payments=true' : ''}',
+      );
 
   Future<String> nextNumber(String voucherType) async {
     final data = await _api.get('/vouchers/next-number', query: {'voucher_type': voucherType});

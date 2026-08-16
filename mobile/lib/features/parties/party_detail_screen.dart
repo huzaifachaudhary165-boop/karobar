@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/l10n/strings.dart';
+import '../../core/network/api_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/common.dart';
@@ -113,6 +114,65 @@ class PartyDetailScreen extends ConsumerWidget {
       if (!context.mounted) return;
       invalidateBusinessData(ref);
       showSuccess(context, '${party.name} deleted.');
+      context.pop();
+    } on ApiException catch (error) {
+      if (!context.mounted) return;
+      // The server refuses somebody with bills against them and says to mark
+      // them inactive — from a screen that had no way to do it. Same dead end
+      // as deleting an item, and the same answer: offer it here.
+      final count = error.details['transaction_count'];
+      if (count != null) {
+        await _offerToDeactivate(context, ref, party, count);
+        return;
+      }
+      showError(context, error);
+    } catch (error) {
+      if (context.mounted) showError(context, error);
+    }
+  }
+
+  /// Takes somebody off the list without touching what they have bought.
+  ///
+  /// Their bills are the reason they cannot be deleted, and those bills belong
+  /// to the shop's history rather than to the customer. Hiding them is the
+  /// only honest way to tidy the list.
+  Future<void> _offerToDeactivate(
+    BuildContext context,
+    WidgetRef ref,
+    Party party,
+    Object count,
+  ) async {
+    final hide = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.t('${party.name} is on $count bill'
+            '${count == 1 ? '' : 's'}')),
+        content: Text(
+          context.t('They cannot be deleted without changing what those bills '
+              'say. Hiding them takes them off your list and off new bills, and '
+              'leaves the old ones exactly as they are.'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(context.t('Leave them')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(context.t('Hide them')),
+          ),
+        ],
+      ),
+    );
+    if (hide != true || !context.mounted) return;
+
+    try {
+      await ref
+          .read(partyRepositoryProvider)
+          .update(party.id, {'is_active': false});
+      if (!context.mounted) return;
+      invalidateBusinessData(ref);
+      showSuccess(context, '${party.name} hidden.');
       context.pop();
     } catch (error) {
       if (context.mounted) showError(context, error);

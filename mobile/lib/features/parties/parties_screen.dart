@@ -92,6 +92,7 @@ class _PartiesScreenState extends ConsumerState<PartiesScreen> {
                   'supplier': strings.get('supplier'),
                   'receivable': strings.get('to_collect'),
                   'payable': strings.get('to_pay'),
+                  'hidden': 'Hidden',
                 }.entries) ...[
                   ChoiceChip(
                     label: Text(entry.value),

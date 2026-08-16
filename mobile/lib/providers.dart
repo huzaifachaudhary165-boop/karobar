@@ -450,6 +450,9 @@ final partiesProvider = StreamProvider.autoDispose<Paged<Party>>((ref) {
         partyType: partyTypeForFilter(filter),
         onlyReceivable: filter == 'receivable',
         onlyPayable: filter == 'payable',
+        // Hiding somebody has to be undoable, or it is a one-way door: their
+        // name would be gone from the app while their bills still carry it.
+        isActive: filter == 'hidden' ? false : true,
         size: 50,
       ));
 });

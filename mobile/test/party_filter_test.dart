@@ -50,7 +50,9 @@ void main() {
 
   test('the chips the screen actually shows are all handled', () {
     // Straight from parties_screen.dart.
-    const chips = ['all', 'customer', 'supplier', 'receivable', 'payable'];
+    const chips = [
+      'all', 'customer', 'supplier', 'receivable', 'payable', 'hidden',
+    ];
     for (final chip in chips) {
       final sent = partyTypeForFilter(chip);
       expect(sent == null || partyTypeFilters.contains(sent), isTrue,

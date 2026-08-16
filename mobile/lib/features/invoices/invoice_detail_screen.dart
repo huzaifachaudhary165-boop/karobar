@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/l10n/strings.dart';
+import '../../core/network/api_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/document_types.dart';
 import '../../core/utils/formatters.dart';
@@ -130,6 +131,71 @@ class InvoiceDetailScreen extends ConsumerWidget {
     );
   }
 
+  /// Deletes the bill, and offers the way through when money is on it.
+  ///
+  /// A bill with a payment against it is refused, and rightly — the payment
+  /// records cash that genuinely changed hands. But the refusal used to end
+  /// there, telling the shopkeeper to "remove the payments first" from a
+  /// screen with no way to do that. Trying to delete anything simply produced
+  /// warnings, over and over.
+  ///
+  /// The second attempt keeps the money and drops only its link to this bill,
+  /// so it sits on the customer's account for the next one.
+  Future<void> _remove(
+    BuildContext context,
+    WidgetRef ref,
+    Voucher voucher, {
+    bool releasePayments = false,
+  }) async {
+    try {
+      await ref
+          .read(voucherRepositoryProvider)
+          .delete(voucher.id, releasePayments: releasePayments);
+      if (!context.mounted) return;
+      invalidateBusinessData(ref);
+      showSuccess(context, '${voucher.number} deleted.');
+      context.pop();
+    } on ApiException catch (error) {
+      if (!context.mounted) return;
+
+      if (error.details['can_release_payments'] != true) {
+        showError(context, error);
+        return;
+      }
+
+      final paid = num.tryParse('${error.details['paid_amount']}') ?? 0;
+      final who = '${error.details['party_name'] ?? 'the customer'}';
+
+      final release = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(context.t('${Fmt.money(paid)} was received on this bill')),
+          content: Text(
+            context.t('That money is not deleted — it goes back onto $who\'s '
+                'account as an advance, ready for their next bill. Only the '
+                'bill itself goes.'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(context.t('Keep the bill')),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(context.t('Delete it')),
+            ),
+          ],
+        ),
+      );
+      if (release != true || !context.mounted) return;
+
+      await _remove(context, ref, voucher, releasePayments: true);
+    } catch (error) {
+      if (context.mounted) showError(context, error);
+    }
+  }
+
   Future<void> _onAction(
     BuildContext context,
     WidgetRef ref,
@@ -188,15 +254,7 @@ class InvoiceDetailScreen extends ConsumerWidget {
           ),
         );
         if (confirmed != true || !context.mounted) return;
-        try {
-          await ref.read(voucherRepositoryProvider).delete(voucher.id);
-          if (!context.mounted) return;
-          invalidateBusinessData(ref);
-          showSuccess(context, '${voucher.number} deleted.');
-          context.pop();
-        } catch (error) {
-          if (context.mounted) showError(context, error);
-        }
+        await _remove(context, ref, voucher);
 
       case 'print':
         await showPrintSheet(context, voucher);

@@ -134,14 +134,29 @@ async def update_voucher(
 
 
 @router.delete("/{voucher_id}", response_model=Message, summary="Delete a document")
-async def delete_voucher(voucher_id: str, tenant: Tenant, db: DbSession) -> Message:
+async def delete_voucher(
+    voucher_id: str,
+    tenant: Tenant,
+    db: DbSession,
+    release_payments: bool = Query(
+        False,
+        description=(
+            "Delete even though money has been received against it. The payments "
+            "themselves are kept and go back to the party's account as an advance."
+        ),
+    ),
+) -> Message:
     service = VoucherService(db, tenant.actor)
     existing = await service.get_or_404(voucher_id)
     tenant.require(
         Perm.PURCHASE_DELETE if existing.type_enum.party_kind == "supplier" else Perm.SALE_DELETE
     )
-    await service.delete(voucher_id)
-    return Message(message="Document deleted.")
+    await service.delete(voucher_id, release_payments=release_payments)
+    return Message(
+        message="Document deleted. The money received stays on the party's account."
+        if release_payments
+        else "Document deleted."
+    )
 
 
 @router.post("/{voucher_id}/cancel", response_model=VoucherOut, summary="Cancel a document")
