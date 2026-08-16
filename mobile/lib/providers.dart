@@ -64,6 +64,8 @@ final businessRepositoryProvider =
     Provider((ref) => BusinessRepository(ref.watch(apiClientProvider)));
 final dataRepositoryProvider =
     Provider((ref) => DataRepository(ref.watch(apiClientProvider)));
+final reminderRepositoryProvider =
+    Provider((ref) => ReminderRepository(ref.watch(apiClientProvider)));
 final stockRepositoryProvider =
     Provider((ref) => StockRepository(ref.watch(apiClientProvider)));
 final financeRepositoryProvider =
@@ -560,6 +562,17 @@ final unitsProvider = StreamProvider<List<Unit>>((ref) {
   final repository = ref.watch(stockRepositoryProvider);
   return _cachedThenFresh<List<Unit>>((emit) => repository.units(onCached: emit));
 });
+
+/// What is still to be done.
+final remindersProvider = StreamProvider.autoDispose<List<Reminder>>((ref) {
+  final repository = ref.watch(reminderRepositoryProvider);
+  return _cachedThenFresh<List<Reminder>>(
+      (emit) => repository.list(onCached: emit));
+});
+
+final reminderSummaryProvider = FutureProvider.autoDispose<ReminderSummary>(
+  (ref) => ref.watch(reminderRepositoryProvider).summary(),
+);
 
 final godownsProvider = StreamProvider.autoDispose<List<Godown>>((ref) {
   final repository = ref.watch(stockRepositoryProvider);

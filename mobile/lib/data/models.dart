@@ -959,6 +959,78 @@ class Insight {
 
 // ── stock depth ──────────────────────────────────────────────────
 /// A place stock physically sits: the shop, a godown, a second branch.
+/// Something the shopkeeper decided to be reminded about.
+///
+/// Different from a notification, which the app works out for itself and which
+/// comes and goes as the shop's figures change. This one was typed by somebody,
+/// so nothing about the shop can make it untrue and nothing may quietly delete
+/// it.
+class Reminder {
+  const Reminder({
+    required this.id,
+    required this.title,
+    required this.dueAt,
+    this.note,
+    this.partyId,
+    this.partyName,
+    this.amount,
+    this.isDone = false,
+    this.isDue = false,
+  });
+
+  final String id;
+  final String title;
+  final DateTime dueAt;
+  final String? note;
+
+  /// Who it is about, when it is about somebody.
+  final String? partyId;
+  final String? partyName;
+
+  /// How much, when it is about money.
+  final num? amount;
+
+  final bool isDone;
+
+  /// Its time has come and nobody has dealt with it. Worked out by the server
+  /// against its own clock, so a phone with the wrong date cannot hide one.
+  final bool isDue;
+
+  /// How overdue, in whole days. Negative while it is still ahead.
+  int get daysLate => DateTime.now().difference(dueAt).inDays;
+
+  factory Reminder.fromJson(Map<String, dynamic> json) => Reminder(
+        id: _str(json['id']),
+        title: _str(json['title']),
+        dueAt: _date(json['due_at']) ?? DateTime.now(),
+        note: json['note'] as String?,
+        partyId: json['party_id'] as String?,
+        partyName: json['party_name'] as String?,
+        amount: _numOrNull(json['amount']),
+        isDone: _bool(json['is_done']),
+        isDue: _bool(json['is_due']),
+      );
+}
+
+/// What is waiting, in one line.
+class ReminderSummary {
+  const ReminderSummary({
+    this.total = 0,
+    this.dueNow = 0,
+    this.amountOutstanding = 0,
+  });
+
+  final int total;
+  final int dueNow;
+  final num amountOutstanding;
+
+  factory ReminderSummary.fromJson(Map<String, dynamic> json) => ReminderSummary(
+        total: _num(json['total']).toInt(),
+        dueNow: _num(json['due_now']).toInt(),
+        amountOutstanding: _num(json['amount_outstanding']),
+      );
+}
+
 /// How a shop measures what it sells.
 ///
 /// Kept on the server rather than as a list in the app, because the list in the

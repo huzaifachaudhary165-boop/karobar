@@ -150,6 +150,14 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                   const Divider(height: 1),
                   ListTile(
+                    leading: const Icon(Icons.notifications_active_outlined),
+                    title: Text(context.t('Reminders')),
+                    subtitle: const Text('Anything you do not want to forget'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.goNamed(Routes.reminders),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
                     leading: const Icon(Icons.payments_outlined),
                     title: Text(context.t('Payments')),
                     subtitle: const Text('Everything received and paid out'),

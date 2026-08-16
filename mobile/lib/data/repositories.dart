@@ -532,6 +532,71 @@ class PaymentRepository {
   }
 }
 
+/// Things the shopkeeper asked to be reminded about.
+///
+/// Separate from notifications, which the server works out for itself. These
+/// were typed by somebody, so nothing here ever deletes one on its own.
+class ReminderRepository {
+  ReminderRepository(this._api);
+
+  final ApiClient _api;
+
+  Future<List<Reminder>> list({
+    bool includeDone = false,
+    void Function(List<Reminder>)? onCached,
+  }) async {
+    final data = await _api.get(
+      '/reminders',
+      query: {'include_done': includeDone},
+      onCached: _parsedList(onCached, Reminder.fromJson),
+    );
+    return (data as List)
+        .map((e) => Reminder.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  Future<ReminderSummary> summary() async {
+    final data = await _api.get('/reminders/summary', cache: false);
+    return ReminderSummary.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<Reminder> create({
+    required String title,
+    DateTime? dueAt,
+    String? note,
+    String? partyId,
+    num? amount,
+  }) async {
+    final data = await _api.post('/reminders', body: {
+      'title': title,
+      if (dueAt != null) 'due_at': dueAt.toUtc().toIso8601String(),
+      if (note != null && note.isNotEmpty) 'note': note,
+      if (partyId != null) 'party_id': partyId,
+      if (amount != null) 'amount': amount,
+    });
+    return Reminder.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<Reminder> update(String id, Map<String, dynamic> body) async {
+    final data = await _api.patch('/reminders/$id', body: body);
+    return Reminder.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<Reminder> setDone(String id, {bool done = true}) async {
+    final data = await _api.post('/reminders/$id/done?done=$done');
+    return Reminder.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  /// Pushes it out without losing it. The alternative people actually use is
+  /// ticking it off to make it go away, which loses the thing they meant to do.
+  Future<Reminder> snooze(String id, {int days = 1}) async {
+    final data = await _api.post('/reminders/$id/snooze?days=$days');
+    return Reminder.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<void> delete(String id) => _api.delete('/reminders/$id');
+}
+
 /// Locations, batches and serial numbers — the depth behind a plain stock figure.
 class StockRepository {
   StockRepository(this._api);

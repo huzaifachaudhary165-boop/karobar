@@ -697,6 +697,12 @@ class _QuickActions extends ConsumerWidget {
                 : showError(context, 'Bill scanning ${Device.unavailableHere.toLowerCase()}'),
           ),
           ActionTile(
+            icon: Icons.notifications_active_outlined,
+            label: strings.get('reminders'),
+            color: AppColors.warning,
+            onTap: () => context.goNamed(Routes.reminders),
+          ),
+          ActionTile(
             icon: Icons.calculate_outlined,
             label: strings.get('calculator'),
             color: AppColors.info,

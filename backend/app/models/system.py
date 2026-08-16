@@ -7,12 +7,15 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
-    BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint,
+    BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, Numeric, String, Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.types import GUID, JSONType, TZDateTime
-from app.models.base import Base, TenantMixin, TimestampMixin, UUIDMixin
+from app.models.base import (
+    Base, SoftDeleteMixin, TenantMixin, TimestampMixin, UUIDMixin,
+)
 from app.models.enums import NotificationChannel, SyncOperation
 
 
@@ -125,6 +128,44 @@ class Notification(Base, UUIDMixin, TenantMixin, TimestampMixin):
     delivery_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
     delivery_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     scheduled_for: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True, index=True)
+
+
+class Reminder(Base, UUIDMixin, TenantMixin, TimestampMixin, SoftDeleteMixin):
+    """Something a shopkeeper decided to be reminded about.
+
+    Kept apart from Notification, which is *derived*: those are rebuilt from
+    current state on every refresh, so an overdue invoice notice appears and
+    disappears on its own. A reminder is the opposite — somebody typed it, and
+    nothing about the shop's state can make it untrue. Storing it in the same
+    table would mean a refresh could quietly delete a promise.
+
+    [party_id] and [amount] are optional because both are usually the point:
+    "Ahmed ko 5000 yaad dilana" is a person and a figure, and a reminder that
+    cannot hold either is a note-taking app.
+    """
+
+    __table_args__ = (
+        Index("ix_reminders_biz_due", "business_id", "is_done", "due_at"),
+    )
+
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    #: When to start showing it. Past due is the normal state for a reminder
+    #: nobody has dealt with yet, so this is never cleaned up by age.
+    due_at: Mapped[datetime] = mapped_column(TZDateTime(), nullable=False, index=True)
+
+    #: Who it is about, when it is about somebody.
+    party_id: Mapped[str | None] = mapped_column(GUID(), nullable=True, index=True)
+    party_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+
+    #: How much, when it is about money owed or to be paid.
+    amount: Mapped[Any | None] = mapped_column(Numeric(18, 4), nullable=True)
+
+    is_done: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    done_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
+
+    created_by: Mapped[str | None] = mapped_column(GUID(), nullable=True)
 
 
 class Integration(Base, UUIDMixin, TenantMixin, TimestampMixin):

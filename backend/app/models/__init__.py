@@ -25,7 +25,7 @@ from app.models.recurring import RecurringInvoice
 from app.models.payment import Account, Payment, PaymentAllocation
 from app.models.system import (
     Attachment, AuditLog, ChangeLog, Integration, MessageLog, Notification,
-    NumberSequence, SyncState,
+    NumberSequence, Reminder, SyncState,
 )
 from app.models.user import OtpChallenge, User, UserSession
 from app.models.voucher import Voucher, VoucherLine
@@ -51,7 +51,7 @@ __all__ = [
     "AiConversation", "AiMessage", "AiToolCall", "AiUsage", "AiInsight", "OcrJob",
     # system
     "AuditLog", "ChangeLog", "SyncState", "NumberSequence", "Attachment",
-    "Notification", "Integration", "MessageLog",
+    "Notification", "Reminder", "Integration", "MessageLog",
     # enums
     "VoucherType", "VoucherStatus", "PartyType", "PaymentDirection", "PaymentMode",
     "TaxType", "StockMovement", "ItemType", "SerialStatus", "DiscountType", "BusinessType",

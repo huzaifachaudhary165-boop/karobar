@@ -30,6 +30,7 @@ KIND_PAYMENT_DUE = "payment_due"
 KIND_LOW_STOCK = "low_stock"
 KIND_EXPIRING = "expiring_stock"
 KIND_STALE_QUOTATION = "stale_quotation"
+KIND_REMINDER = "reminder"
 
 
 class NotificationService(BaseService[Notification]):
@@ -122,6 +123,7 @@ class NotificationService(BaseService[Notification]):
             *await self._low_stock_specs(),
             *await self._expiring_specs(),
             *await self._stale_quotation_specs(symbol),
+            *await self._reminder_specs(symbol),
         ]:
             key = (spec["kind"], spec.get("entity_id"))
             seen.add(key)
@@ -143,12 +145,44 @@ class NotificationService(BaseService[Notification]):
         # Anything no longer true is dropped rather than left to rot.
         for key, row in existing.items():
             if key not in seen and row.kind in {
-                KIND_PAYMENT_DUE, KIND_LOW_STOCK, KIND_EXPIRING, KIND_STALE_QUOTATION
+                KIND_PAYMENT_DUE, KIND_LOW_STOCK, KIND_EXPIRING, KIND_STALE_QUOTATION,
+                # A reminder's *notice* is derived and goes when the reminder
+                # is ticked off or snoozed. The reminder itself lives in its
+                # own table and is never touched from here — deleting somebody's
+                # note because a refresh ran would be unforgivable.
+                KIND_REMINDER,
             }:
                 await self.db.delete(row)
 
         await self.db.flush()
         return live
+
+    async def _reminder_specs(self, symbol: str) -> list[dict[str, Any]]:
+        """A notice for each reminder whose time has come.
+
+        The reminder is the record; this is only the tap on the shoulder. It
+        appears when the reminder falls due and goes when it is dealt with,
+        which is exactly what the rest of this file does for everything else.
+        """
+        from app.services.reminder_service import ReminderService
+
+        rows = await ReminderService(self.db, self.actor).due()
+        specs: list[dict[str, Any]] = []
+        for row in rows:
+            parts = [p for p in (row.party_name, row.note) if p]
+            if row.amount:
+                parts.insert(0, f"{symbol}{row.amount:,.0f}")
+            specs.append(
+                {
+                    "kind": KIND_REMINDER,
+                    "title": row.title,
+                    "body": " · ".join(parts) or None,
+                    "entity_type": "reminder",
+                    "entity_id": row.id,
+                    "data": {"party_id": row.party_id},
+                }
+            )
+        return specs
 
     async def _overdue_specs(self, symbol: str) -> list[dict[str, Any]]:
         rows = (

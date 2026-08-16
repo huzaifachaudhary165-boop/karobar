@@ -36,6 +36,7 @@ from app.models.party import Party, PartyGroup
 from app.models.payment import Account, Payment, PaymentAllocation
 from app.models.pricing import DiscountScheme, PriceList, PriceListEntry
 from app.models.recurring import RecurringInvoice
+from app.models.system import Reminder
 from app.models.voucher import Voucher, VoucherLine
 from app.services.base import ActorContext
 
@@ -76,6 +77,10 @@ _TABLES: list[tuple[str, Any]] = [
     ("production_runs", ProductionRun),
     ("consumed_materials", ConsumedMaterial),
     ("recurring_invoices", RecurringInvoice),
+    # Promises the shopkeeper wrote down themselves. Nothing regenerates these
+    # — unlike a notification, which is worked out from current state — so a
+    # restore without them loses every debt somebody meant to chase.
+    ("reminders", Reminder),
 ]
 
 # Tables a backup deliberately leaves out, and why.
