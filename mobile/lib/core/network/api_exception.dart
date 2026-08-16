@@ -27,6 +27,15 @@ class ApiException implements Exception {
   bool get isValidation => code == 'validation_error' || statusCode == 422;
   bool get isRateLimited => statusCode == 429;
   bool get isOffline => code == 'offline' || code == 'timeout';
+
+  /// The server fell over rather than saying no.
+  ///
+  /// Distinct from a refusal: a 422 will fail the same way tomorrow, whereas a
+  /// 500 usually succeeds a moment later. Three writes in six came back
+  /// `database_error` from the live deployment inside one minute, so this is
+  /// not a hypothetical — and a write thrown away for it is a shopkeeper's
+  /// bill lost for a reason that was never theirs.
+  bool get isServerFault => (statusCode ?? 0) >= 500;
   bool get isServerError => (statusCode ?? 0) >= 500;
   bool get isAiUnavailable => code.startsWith('ai_');
 
