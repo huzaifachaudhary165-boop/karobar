@@ -8,9 +8,12 @@ import '../../core/l10n/strings.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/document_types.dart';
+import '../../core/utils/device.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/screen.dart';
 import '../../core/widgets/barcode_sheet.dart';
+import '../../core/widgets/calculator_sheet.dart';
+import '../../core/widgets/handheld_scanner.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
 import '../../data/offline_write.dart';
@@ -87,6 +90,20 @@ class _LineDraft {
   /// they were is the whole question when they come back.
   final serials = <String>[];
 
+  /// What these goods cost the shop.
+  ///
+  /// The item's own buying price, which is what the server uses when it has no
+  /// weighted-average cost yet. The two can differ once stock has been bought
+  /// at more than one price — this is the counter's estimate, and the bill
+  /// carries the server's figure once it is saved.
+  num get cost => qty * item.purchasePrice;
+
+  /// Made on this line, before tax.
+  ///
+  /// Tax is not the shop's money — it is collected and handed on — so it is
+  /// left out, exactly as the server does it.
+  num get profit => taxable - cost;
+
   num get gross => qty * rate;
   num get discount => gross * discountPercent / 100;
   num get taxable => gross - discount;
@@ -148,6 +165,23 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
   num get _discount => _lines.fold<num>(0, (sum, line) => sum + line.discount);
   num get _tax => _lines.fold<num>(0, (sum, line) => sum + line.tax);
   num get _total => _lines.fold<num>(0, (sum, line) => sum + line.total);
+
+  /// What this bill's goods cost the shop, and what is left after that.
+  ///
+  /// Shown while the bill is being made, not after — a shopkeeper deciding
+  /// whether to give one more rupee off needs to know what is left *before*
+  /// they say yes, and finding out afterwards is finding out too late.
+  ///
+  /// Only on a sale. A purchase has no margin; the cost is the whole of it.
+  num get _cost => _lines.fold<num>(0, (sum, line) => sum + line.cost);
+  num get _profit => _lines.fold<num>(0, (sum, line) => sum + line.profit);
+
+  /// Margin against what was actually charged, which is the number a
+  /// shopkeeper thinks in — "kitne percent bacha".
+  num get _marginPercent {
+    final taxable = _subtotal - _discount;
+    return taxable <= 0 ? 0 : (_profit / taxable) * 100;
+  }
 
   /// True while an existing bill is being read in, so the form is not shown
   /// half-filled with a save button that would wipe what it has not loaded.
@@ -378,21 +412,30 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
 
       final code = await scanBarcode(context);
       if (code == null || !mounted) return;
+      if (!await _addByCode(code)) return;
+    }
+  }
 
-      try {
-        final item = await ref.read(itemRepositoryProvider).byBarcode(code);
-        if (!mounted) return;
-        _addItem(item);
-        await _requote();
-        await _refreshPoints();
-      } on ApiException catch (error) {
-        if (!mounted) return;
-        showError(
-          context,
-          error.isNotFound ? 'No item has the code $code.' : error,
-        );
-        return;
-      }
+  /// Puts whatever was scanned on the bill.
+  ///
+  /// Shared by the camera sheet and the USB gun, which are the same event
+  /// arriving two different ways. Returns false when the scanning should stop
+  /// — an unknown code, or the screen going away.
+  Future<bool> _addByCode(String code) async {
+    try {
+      final item = await ref.read(itemRepositoryProvider).byBarcode(code);
+      if (!mounted) return false;
+      _addItem(item);
+      await _requote();
+      await _refreshPoints();
+      return mounted;
+    } on ApiException catch (error) {
+      if (!mounted) return false;
+      showError(
+        context,
+        error.isNotFound ? 'No item has the code $code.' : error,
+      );
+      return false;
     }
   }
 
@@ -565,7 +608,15 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
       );
     }
 
-    return Scaffold(
+    // A USB gun types the barcode and presses Enter, so it works anywhere
+    // there is a keyboard — including the browser and the desktop, where the
+    // camera plugin does not exist at all. Wrapped around the whole screen
+    // rather than a field, because nobody holding a scanner clicks into a box
+    // first.
+    return HandheldScannerListener(
+      enabled: Device.canUseHandheldScanner,
+      onScan: _addByCode,
+      child: Scaffold(
       appBar: AppBar(title: Text(_title)),
       // A form one field per line down the middle of a desktop window wastes
       // two thirds of the screen and pushes the save button off the bottom.
@@ -745,6 +796,21 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                           symbol: symbol,
                           emphasise: _pointsValue == 0,
                         ),
+                        // Before the bill is saved, not after: a shopkeeper
+                        // deciding whether to give one more rupee off needs to
+                        // know what is left while they can still say no.
+                        //
+                        // Never on a purchase — there is no margin on what you
+                        // are buying, the cost is the whole of it.
+                        if (!_isPurchase && _lines.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          _MarginRow(
+                            cost: _cost,
+                            profit: _profit,
+                            percent: _marginPercent,
+                            symbol: symbol,
+                          ),
+                        ],
                         // The bill is still worth its total — points are a
                         // tender, not a discount — but what the customer hands
                         // over is the smaller figure, so that is the one shown
@@ -803,6 +869,28 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                                     labelText: context.t('Amount received'),
                                     prefixText: symbol,
                                     isDense: true,
+                                    // Counting a handful of notes is arithmetic
+                                    // people currently leave the app to do —
+                                    // and a half-made bill is what gets lost
+                                    // while they are gone.
+                                    suffixIcon: IconButton(
+                                      icon: const Icon(Icons.calculate_outlined,
+                                          size: 20),
+                                      tooltip: context.t('Calculator'),
+                                      onPressed: () async {
+                                        final value = await showCalculator(
+                                          context,
+                                          start: num.tryParse(
+                                                  _paidAmount.text.trim())
+                                              ?.toDouble(),
+                                          title: 'Amount received',
+                                        );
+                                        if (value != null) {
+                                          setState(() => _paidAmount.text =
+                                              trimZeros(value));
+                                        }
+                                      },
+                                    ),
                                   ),
                                 ),
                               ),
@@ -893,6 +981,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
             ],
           ),
         ),
+      ),
       ),
     );
   }
@@ -1247,6 +1336,74 @@ class _Stepper extends StatelessWidget {
               child: Icon(Icons.add, size: 15),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What the goods cost, and what is left after them.
+///
+/// Set apart from the totals rather than listed among them, because it is not
+/// part of what the customer is being charged and must never be read as
+/// another line on the bill. Tinted by whether there is anything left at all:
+/// a shopkeeper selling below cost has usually not noticed, and that is the
+/// one thing here worth interrupting for.
+class _MarginRow extends StatelessWidget {
+  const _MarginRow({
+    required this.cost,
+    required this.profit,
+    required this.percent,
+    required this.symbol,
+  });
+
+  final num cost;
+  final num profit;
+  final num percent;
+  final String symbol;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final losing = profit < 0;
+    final tint = losing ? AppColors.danger : AppColors.success;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: tint.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            losing ? Icons.trending_down : Icons.trending_up,
+            size: 17,
+            color: tint,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              // "Cost" rather than "COGS". The word has to be one a shopkeeper
+              // already uses about their own money.
+              context.t('Cost ${Fmt.money(cost, symbol: symbol, decimals: false)}'),
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+          Text(
+            losing
+                ? context.t('Loss ${Fmt.money(profit.abs(), symbol: symbol, decimals: false)}')
+                : context.t('Profit ${Fmt.money(profit, symbol: symbol, decimals: false)}'),
+            style: theme.textTheme.labelLarge
+                ?.copyWith(color: tint, fontWeight: FontWeight.w800),
+          ),
+          if (!losing && percent > 0) ...[
+            const SizedBox(width: 6),
+            Text(
+              '(${trimZeros(percent)}%)',
+              style: theme.textTheme.bodySmall?.copyWith(color: tint),
+            ),
+          ],
         ],
       ),
     );

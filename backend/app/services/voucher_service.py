@@ -275,41 +275,104 @@ class VoucherService(BaseService[Voucher]):
         await self.track("cancel", voucher, label=voucher.number, changes={"reason": reason})
         return voucher
 
-    async def delete(self, voucher_id: str, *, release_payments: bool = False) -> None:
+    async def delete(self, voucher_id: str, *, payments: str = "block") -> None:
         """Remove a document that should never have existed.
 
-        A bill with money against it is refused by default, and that default is
-        right: the payment is a record of cash that genuinely changed hands, and
-        deleting the bill underneath it would leave the shop's books saying the
-        money was never received.
+        [payments] decides what happens to money already received against it,
+        and the three answers are genuinely different things a shopkeeper
+        means:
 
-        But refusing and stopping there is a dead end — the message says to
-        remove the payments first, and there is nowhere to do that from the bill
-        the shopkeeper is looking at. [release_payments] is the way through: the
-        allocations are cleared, so the money stays on the party's account as an
-        advance and can be put against the next bill. Nothing is lost; only the
-        link between this bill and that money.
+        * ``block`` — refuse, and say what the two ways through are. The
+          default, because destroying a record of cash by accident is not
+          something to make easy.
+        * ``release`` — keep the payments, drop only their link to this bill.
+          The money sits on the party's account as an advance for the next one.
+          What somebody means when the bill was wrong but the cash was real.
+        * ``delete`` — remove the payments too. What somebody means when the
+          whole entry was a mistake: a duplicate, a test, the wrong shop's
+          bill. Nothing about it happened, so nothing about it should remain.
+
+        Refusing and stopping there was the old behaviour, and it was a dead
+        end: the message said to remove the payments first, and there was
+        nowhere to do that from the bill in front of them.
         """
         voucher = await self.get_or_404(voucher_id)
 
         if voucher.paid_amount > 0:
-            if not release_payments:
+            if payments == "release":
+                await self._release_allocations(voucher)
+            elif payments == "delete":
+                await self._delete_payments(voucher)
+            else:
                 raise BusinessRuleError(
                     "Remove the payments linked to this invoice before deleting it.",
                     details={
                         "paid_amount": str(voucher.paid_amount),
-                        # What the app needs to offer the way through, rather
-                        # than repeating a refusal the shopkeeper cannot act on.
+                        # What the app needs to offer a way through, rather than
+                        # repeating a refusal the shopkeeper cannot act on.
                         "can_release_payments": True,
+                        "can_delete_payments": True,
                         "party_name": voucher.party_name,
                     },
                 )
-            await self._release_allocations(voucher)
 
         if voucher.status != VoucherStatus.CANCELLED:
             await self._reverse_stock(voucher)
             await self._reverse_ledger(voucher)
         await self.soft_delete(voucher, label=f"{voucher.voucher_type} {voucher.number}")
+
+    async def _delete_payments(self, voucher: Voucher) -> None:
+        """Removes the payments along with the bill.
+
+        For the entry that never should have existed at all — a duplicate, a
+        test, somebody else's bill keyed by mistake. The cash it claims to have
+        received never arrived, so leaving the receipt behind would put money in
+        the shop's books that nobody ever handed over.
+
+        Goes through PaymentService rather than deleting rows: the party's
+        balance and the cash or bank account both have to move back, and that
+        arithmetic lives there.
+
+        A payment that also settled *other* bills is only unlinked from this
+        one. It is somebody's real money for those bills, and this bill has no
+        claim to take it away from them.
+        """
+        from app.models.payment import PaymentAllocation
+        from app.services.payment_service import PaymentService
+
+        payment_ids = list(
+            (
+                await self.db.execute(
+                    select(PaymentAllocation.payment_id).where(
+                        PaymentAllocation.business_id == self.business_id,
+                        PaymentAllocation.voucher_id == voucher.id,
+                    )
+                )
+            ).scalars().all()
+        )
+
+        payments = PaymentService(self.db, self.actor)
+        for payment_id in payment_ids:
+            elsewhere = (
+                await self.db.execute(
+                    select(func.count())
+                    .select_from(PaymentAllocation)
+                    .where(
+                        PaymentAllocation.payment_id == payment_id,
+                        PaymentAllocation.voucher_id != voucher.id,
+                    )
+                )
+            ).scalar_one()
+
+            if elsewhere:
+                await self._release_allocations(voucher)
+                continue
+
+            await payments.delete(payment_id)
+
+        voucher.paid_amount = ZERO
+        voucher.balance_amount = voucher.total
+        await self.db.flush()
 
     async def _release_allocations(self, voucher: Voucher) -> None:
         """Hands this bill's payments back to the party as unallocated money.

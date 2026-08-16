@@ -145,12 +145,12 @@ class InvoiceDetailScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     Voucher voucher, {
-    bool releasePayments = false,
+    String payments = 'block',
   }) async {
     try {
       await ref
           .read(voucherRepositoryProvider)
-          .delete(voucher.id, releasePayments: releasePayments);
+          .delete(voucher.id, payments: payments);
       if (!context.mounted) return;
       invalidateBusinessData(ref);
       showSuccess(context, '${voucher.number} deleted.');
@@ -166,31 +166,48 @@ class InvoiceDetailScreen extends ConsumerWidget {
       final paid = num.tryParse('${error.details['paid_amount']}') ?? 0;
       final who = '${error.details['party_name'] ?? 'the customer'}';
 
-      final release = await showDialog<bool>(
+      final choice = await showDialog<String>(
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: Text(context.t('${Fmt.money(paid)} was received on this bill')),
-          content: Text(
-            context.t('That money is not deleted — it goes back onto $who\'s '
-                'account as an advance, ready for their next bill. Only the '
-                'bill itself goes.'),
+          // Two genuinely different situations, described by what happened at
+          // the counter rather than by what the app will do about it. A
+          // shopkeeper knows which of these is true; they do not know what
+          // "release the allocation" means.
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _DeleteChoice(
+                icon: Icons.account_balance_wallet_outlined,
+                title: context.t('The bill was wrong, the money was real'),
+                detail: context.t('The bill goes. ${Fmt.money(paid)} stays on '
+                    '$who\'s account as an advance for their next bill.'),
+                onTap: () => Navigator.pop(dialogContext, 'release'),
+              ),
+              const SizedBox(height: 8),
+              _DeleteChoice(
+                icon: Icons.delete_forever_outlined,
+                danger: true,
+                title: context.t('None of it happened'),
+                detail: context.t('A duplicate, a test, the wrong shop. The '
+                    'bill and the ${Fmt.money(paid)} receipt both go, and the '
+                    'cash comes back out of your drawer.'),
+                onTap: () => Navigator.pop(dialogContext, 'delete'),
+              ),
+            ],
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
+              onPressed: () => Navigator.pop(dialogContext),
               child: Text(context.t('Keep the bill')),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: Text(context.t('Delete it')),
             ),
           ],
         ),
       );
-      if (release != true || !context.mounted) return;
+      if (choice == null || !context.mounted) return;
 
-      await _remove(context, ref, voucher, releasePayments: true);
+      await _remove(context, ref, voucher, payments: choice);
     } catch (error) {
       if (context.mounted) showError(context, error);
     }
@@ -359,6 +376,120 @@ class InvoiceDetailScreen extends ConsumerWidget {
     } catch (error) {
       if (context.mounted) showError(context, error);
     }
+  }
+}
+
+/// One of the two things that can be meant by deleting a paid bill.
+///
+/// Written as a tappable card rather than a button row because the difference
+/// between them is the sentence underneath, and a shopkeeper has to read that
+/// before choosing — not after.
+/// What the shop made on this bill.
+///
+/// The server's figure, costed against the stock that actually went out —
+/// which is why it appears only once the bill exists. Set apart from the
+/// amounts charged, and never printed: it is the shop's business, and a number
+/// sitting among the totals would eventually be read out to a customer.
+class _ProfitCard extends StatelessWidget {
+  const _ProfitCard({
+    required this.profit,
+    required this.total,
+    required this.symbol,
+  });
+
+  final num profit;
+  final num total;
+  final String symbol;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final losing = profit < 0;
+    final tint = losing ? AppColors.danger : AppColors.success;
+    final percent = total <= 0 ? 0 : (profit / total) * 100;
+
+    return AppCard(
+      color: tint.withValues(alpha: 0.07),
+      borderColor: tint.withValues(alpha: 0.3),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          Icon(losing ? Icons.trending_down : Icons.trending_up,
+              size: 20, color: tint),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  context.t(losing ? 'Sold at a loss' : 'You made'),
+                  style: theme.textTheme.bodySmall,
+                ),
+                Text(
+                  Fmt.money(profit.abs(), symbol: symbol, decimals: false),
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(color: tint, fontWeight: FontWeight.w800),
+                ),
+              ],
+            ),
+          ),
+          if (!losing && percent > 0)
+            Text(
+              '${trimZeros(percent)}%',
+              style: theme.textTheme.titleSmall?.copyWith(color: tint),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeleteChoice extends StatelessWidget {
+  const _DeleteChoice({
+    required this.icon,
+    required this.title,
+    required this.detail,
+    required this.onTap,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final String detail;
+  final VoidCallback onTap;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tint = danger ? AppColors.danger : AppColors.primary;
+
+    return AppCard(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      borderColor: tint.withValues(alpha: 0.4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: tint),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w700, color: tint),
+                ),
+                const SizedBox(height: 2),
+                Text(detail, style: theme.textTheme.bodySmall),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -551,6 +682,16 @@ class _Body extends ConsumerWidget {
             ],
           ),
         ),
+
+        // What the shop actually made, once the bill exists and the server has
+        // costed it against the stock that really went out. Kept off the
+        // printed copy and out of the totals card: it is the shop's business,
+        // not the customer's, and a figure sitting among the amounts charged
+        // would eventually be read out to somebody.
+        if (voucher.isSale && voucher.profit != 0) ...[
+          const SizedBox(height: 14),
+          _ProfitCard(profit: voucher.profit, total: voucher.total, symbol: symbol),
+        ],
 
         if (voucher.notes != null && voucher.notes!.isNotEmpty) ...[
           const SizedBox(height: 14),

@@ -65,6 +65,7 @@ async def test_the_refusal_carries_what_the_app_needs_to_offer_a_way_through(sho
     details = refused.json()["error"]["details"]
 
     assert details["can_release_payments"] is True
+    assert details["can_delete_payments"] is True
     assert details["paid_amount"].startswith("500")
     assert details["party_name"]
 
@@ -74,7 +75,7 @@ async def test_asking_for_it_properly_deletes_the_bill(shop):
     bill = await _paid_bill(shop)
 
     gone = await shop["client"].delete(
-        f"/vouchers/{bill['id']}", params={"release_payments": True}
+        f"/vouchers/{bill['id']}", params={"payments": "release"}
     )
     assert gone.status_code == 200, gone.text
 
@@ -91,7 +92,7 @@ async def test_the_money_is_not_deleted_with_the_bill(shop):
     before = (await client.get("/payments")).json()
     count_before = len(before["items"] if isinstance(before, dict) else before)
 
-    await client.delete(f"/vouchers/{bill['id']}", params={"release_payments": True})
+    await client.delete(f"/vouchers/{bill['id']}", params={"payments": "release"})
 
     after = (await client.get("/payments")).json()
     rows = after["items"] if isinstance(after, dict) else after
@@ -110,7 +111,7 @@ async def test_the_customer_is_not_left_owing_a_bill_that_no_longer_exists(shop)
     opening = float((await client.get(f"/parties/{party_id}")).json()["balance"])
     bill = await _paid_bill(shop, amount=500, paid=200)
 
-    await client.delete(f"/vouchers/{bill['id']}", params={"release_payments": True})
+    await client.delete(f"/vouchers/{bill['id']}", params={"payments": "release"})
 
     after = float((await client.get(f"/parties/{party_id}")).json()["balance"])
     assert after == pytest.approx(opening - 200), (
@@ -124,7 +125,103 @@ async def test_stock_comes_back(shop):
     before = float((await client.get(f"/items/{shop['sugar']['id']}")).json()["stock_qty"])
 
     bill = await _paid_bill(shop)
-    await client.delete(f"/vouchers/{bill['id']}", params={"release_payments": True})
+    await client.delete(f"/vouchers/{bill['id']}", params={"payments": "release"})
 
     after = float((await client.get(f"/items/{shop['sugar']['id']}")).json()["stock_qty"])
     assert after == before
+
+
+# ── the second option: the entry that never happened ───────────────
+@pytest.mark.asyncio
+async def test_deleting_the_payments_too(shop):
+    """For a duplicate, a test, or somebody else's bill keyed by mistake.
+
+    The cash it claims to have received never arrived, so leaving the receipt
+    behind would put money in the shop's books that nobody ever handed over.
+    """
+    client = shop["client"]
+    bill = await _paid_bill(shop, amount=500)
+
+    before = (await client.get("/payments")).json()
+    count_before = len(before["items"] if isinstance(before, dict) else before)
+
+    gone = await client.delete(
+        f"/vouchers/{bill['id']}", params={"payments": "delete"}
+    )
+    assert gone.status_code == 200, gone.text
+
+    after = (await client.get("/payments")).json()
+    rows = after["items"] if isinstance(after, dict) else after
+    assert len(rows) == count_before - 1, "the receipt must go with the bill"
+
+
+@pytest.mark.asyncio
+async def test_deleting_the_payments_puts_the_cash_back(shop):
+    """The money never arrived, so the drawer must not still be counting it."""
+    client = shop["client"]
+
+    accounts = (await client.get("/payments/accounts")).json()
+    before = {a["id"]: float(a["balance"]) for a in accounts}
+
+    bill = await _paid_bill(shop, amount=500)
+    await client.delete(f"/vouchers/{bill['id']}", params={"payments": "delete"})
+
+    accounts = (await client.get("/payments/accounts")).json()
+    after = {a["id"]: float(a["balance"]) for a in accounts}
+    assert after == before
+
+
+@pytest.mark.asyncio
+async def test_the_customer_owes_nothing_from_a_bill_that_never_happened(shop):
+    client = shop["client"]
+    party_id = shop["customer"]["id"]
+
+    opening = float((await client.get(f"/parties/{party_id}")).json()["balance"])
+    bill = await _paid_bill(shop, amount=500, paid=200)
+
+    await client.delete(f"/vouchers/{bill['id']}", params={"payments": "delete"})
+
+    after = float((await client.get(f"/parties/{party_id}")).json()["balance"])
+    assert after == pytest.approx(opening), (
+        "neither the bill nor the 200 happened, so the balance is untouched"
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_payment_that_settled_other_bills_is_not_destroyed(shop):
+    """Somebody's real money for those other bills.
+
+    This bill has no claim to take it away from them, so the payment is only
+    unlinked from this one however the delete was asked for.
+    """
+    client = shop["client"]
+
+    first = await _paid_bill(shop, amount=500, paid=0) if False else None
+    bill_a = (await client.post("/vouchers", json={
+        "voucher_type": "sale",
+        "party_id": shop["customer"]["id"],
+        "lines": [{"item_id": shop["sugar"]["id"], "qty": 1, "rate": 300, "tax_rate": 0}],
+    })).json()
+    bill_b = (await client.post("/vouchers", json={
+        "voucher_type": "sale",
+        "party_id": shop["customer"]["id"],
+        "lines": [{"item_id": shop["sugar"]["id"], "qty": 1, "rate": 200, "tax_rate": 0}],
+    })).json()
+
+    # One payment covering both, oldest first.
+    settle = await client.post("/payments/settle", json={
+        "party_id": shop["customer"]["id"], "amount": 500, "direction": "in",
+    })
+    assert settle.status_code in (200, 201), settle.text
+
+    gone = await client.delete(
+        f"/vouchers/{bill_a['id']}", params={"payments": "delete"}
+    )
+    assert gone.status_code == 200, gone.text
+
+    # The other bill still has its share.
+    other = (await client.get(f"/vouchers/{bill_b['id']}")).json()
+    assert float(other["paid_amount"]) > 0, (
+        "deleting one bill must not strip the payment off another"
+    )
+    assert first is None

@@ -32,10 +32,24 @@ abstract final class Device {
           defaultTargetPlatform == TargetPlatform.linux ||
           defaultTargetPlatform == TargetPlatform.macOS);
 
-  /// Scanning a barcode needs a camera the scanner plugin can drive. It has no
-  /// Windows implementation, so on the desktop this is false even on a laptop
-  /// that has a webcam.
-  static bool get canScanBarcodes => isMobile;
+  /// Scanning with a camera.
+  ///
+  /// The scanner plugin drives a real camera on a phone and `getUserMedia` in
+  /// a browser, so both can do this. Windows and Linux have no implementation
+  /// at all, which is why a laptop running the desktop build cannot — even one
+  /// with a webcam.
+  ///
+  /// This used to be phone-only, which was simply wrong: the browser build was
+  /// refusing a feature it has always been able to do.
+  static bool get canScanBarcodes => isMobile || kIsWeb;
+
+  /// A USB barcode gun.
+  ///
+  /// It is not a camera — it presents itself as a keyboard, types the code and
+  /// presses Enter. Which means it works anywhere there is a keyboard, and is
+  /// what a shop with a laptop at the counter actually owns. Nothing needs
+  /// driving, so nothing can be missing.
+  static bool get canUseHandheldScanner => isDesktop || kIsWeb;
 
   /// Reading a supplier's bill from a photo runs on-device and is Android and
   /// iOS only.

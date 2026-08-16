@@ -432,13 +432,14 @@ class VoucherRepository {
     return Voucher.fromJson(Map<String, dynamic>.from(data as Map));
   }
 
-  /// [releasePayments] deletes a bill that money has come in against.
+  /// [payments] decides what happens to money already received against it.
   ///
-  /// The payments are kept — the shop received that cash — and go back to the
-  /// party's account as an advance to put against the next bill.
-  Future<void> delete(String id, {bool releasePayments = false}) => _api.delete(
-        '/vouchers/$id${releasePayments ? '?release_payments=true' : ''}',
-      );
+  /// `block` refuses and says what the two ways through are. `release` keeps
+  /// the payments and puts the money back on the party's account as an advance
+  /// — the bill was wrong but the cash was real. `delete` removes the payments
+  /// too, for the entry that never should have existed at all.
+  Future<void> delete(String id, {String payments = 'block'}) =>
+      _api.delete('/vouchers/$id?payments=$payments');
 
   Future<String> nextNumber(String voucherType) async {
     final data = await _api.get('/vouchers/next-number', query: {'voucher_type': voucherType});

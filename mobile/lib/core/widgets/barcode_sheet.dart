@@ -11,12 +11,21 @@ import 'common.dart';
 /// Detection is debounced on the code itself: the camera fires the same barcode
 /// many times a second while it stays in frame, and without this a single scan
 /// would add the same item to a bill repeatedly.
-/// On a machine with no camera plugin this says so and returns null, rather
-/// than opening a sheet that throws. Handled here rather than at each call
-/// site: there are four, and the fifth would be the one that forgot.
+/// Works on a phone and in a browser — the plugin drives a real camera on one
+/// and `getUserMedia` on the other. Only the Windows and Linux builds have no
+/// implementation, and there the message names the handheld gun instead, which
+/// is what a shop with a laptop at the counter actually owns.
+///
+/// Handled here rather than at each call site: there are four, and the fifth
+/// would be the one that forgot.
 Future<String?> scanBarcode(BuildContext context) {
   if (!Device.canScanBarcodes) {
-    showError(context, 'Scanning ${Device.unavailableHere.toLowerCase()}');
+    showError(
+      context,
+      Device.canUseHandheldScanner
+          ? 'No camera here — use a USB barcode scanner, or type the code.'
+          : 'Scanning ${Device.unavailableHere.toLowerCase()}',
+    );
     return Future.value();
   }
 

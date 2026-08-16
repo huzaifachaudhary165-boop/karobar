@@ -138,11 +138,15 @@ async def delete_voucher(
     voucher_id: str,
     tenant: Tenant,
     db: DbSession,
-    release_payments: bool = Query(
-        False,
+    payments: str = Query(
+        "block",
+        pattern="^(block|release|delete)$",
         description=(
-            "Delete even though money has been received against it. The payments "
-            "themselves are kept and go back to the party's account as an advance."
+            "What to do with money already received against it. "
+            "'block' refuses (the default). "
+            "'release' keeps the payments and puts the money back on the party's "
+            "account as an advance — the bill was wrong but the cash was real. "
+            "'delete' removes the payments too — the whole entry was a mistake."
         ),
     ),
 ) -> Message:
@@ -151,11 +155,12 @@ async def delete_voucher(
     tenant.require(
         Perm.PURCHASE_DELETE if existing.type_enum.party_kind == "supplier" else Perm.SALE_DELETE
     )
-    await service.delete(voucher_id, release_payments=release_payments)
+    await service.delete(voucher_id, payments=payments)
     return Message(
-        message="Document deleted. The money received stays on the party's account."
-        if release_payments
-        else "Document deleted."
+        message={
+            "release": "Deleted. The money received stays on the party's account.",
+            "delete": "Deleted, along with the payments against it.",
+        }.get(payments, "Document deleted.")
     )
 
 
