@@ -19,6 +19,7 @@ import '../../features/finance/cheques_screen.dart';
 import '../../features/finance/loans_screen.dart';
 import '../../features/items/item_form_screen.dart';
 import '../../features/notifications/notifications_screen.dart';
+import '../../features/calculator/calculator_screen.dart';
 import '../../features/reminders/reminders_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
 import '../../features/parties/party_detail_screen.dart';
@@ -69,6 +70,7 @@ abstract final class Routes {
   static const payments = 'payments';
   static const notifications = 'notifications';
   static const reminders = 'reminders';
+  static const calculator = 'calculator';
   static const godowns = 'godowns';
   static const expiry = 'expiry';
   static const labels = 'labels';
@@ -321,6 +323,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: 'loans',
             name: Routes.loans,
             builder: (_, __) => const DesktopFrame(child: LoansScreen()),
+          ),
+          GoRoute(
+            path: 'calculator',
+            name: Routes.calculator,
+            builder: (_, __) => const DesktopFrame(child: CalculatorScreen()),
           ),
           GoRoute(
             path: 'reminders',

@@ -8,7 +8,6 @@ import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/device.dart';
 import '../../core/utils/formatters.dart';
-import '../../core/widgets/calculator_sheet.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
 import '../../providers.dart';
@@ -710,7 +709,9 @@ class _QuickActions extends ConsumerWidget {
             // half-finished bill gets lost, and because a shopkeeper who has
             // to open a second app to work out a rate stops trusting that this
             // one covers their day.
-            onTap: () => showCalculator(context, title: 'Calculator'),
+            // The whole module, not just the keypad — margin, discounts, tax
+            // and the units a shop here buys in. The keypad is one tab of it.
+            onTap: () => context.goNamed(Routes.calculator),
           ),
           ActionTile(
             icon: Icons.person_add_outlined,
