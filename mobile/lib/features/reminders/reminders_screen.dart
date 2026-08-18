@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:go_router/go_router.dart';
+
 import '../../core/l10n/strings.dart';
+import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/chase.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
@@ -20,18 +24,191 @@ class RemindersScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Two lists, because a shopkeeper means two different things by "what am I
+    // owed". One is what they wrote down; the other is what the books already
+    // know and nobody had to type.
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(context.t('Reminders')),
+          bottom: TabBar(
+            tabs: [
+              Tab(text: context.t('To do')),
+              Tab(text: context.t('Who owes me')),
+            ],
+          ),
+        ),
+        body: const TabBarView(
+          children: [
+            _ToDoTab(),
+            _OwingTab(),
+          ],
+        ),
+        floatingActionButton: Consumer(
+          builder: (context, ref, _) => FloatingActionButton.extended(
+            onPressed: () => showReminderSheet(context, ref),
+            icon: const Icon(Icons.add_alert_outlined),
+            label: Text(context.t('Remind me')),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Everybody whose balance says they still owe, straight from the books.
+///
+/// Nobody types this list — it is already true. What was missing was somewhere
+/// to see it as a list of *people to contact* rather than as balances, with the
+/// three ways a shop actually gets hold of somebody on each row.
+class _OwingTab extends ConsumerWidget {
+  const _OwingTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(owingPartiesProvider);
+    final symbol = ref.watch(sessionProvider).symbol;
+
+    return RefreshIndicator(
+      onRefresh: () async => ref.invalidate(owingPartiesProvider),
+      child: async.when(
+        loading: () => const ListSkeleton(),
+        error: (error, _) => EmptyState(
+          title: context.t('Could not load'),
+          message: error.toString(),
+          isError: true,
+          actionLabel: context.t('Retry'),
+          onAction: () => ref.invalidate(owingPartiesProvider),
+        ),
+        data: (rows) {
+          if (rows.isEmpty) {
+            return EmptyState(
+              title: context.t('Nobody owes you anything'),
+              message: context.t('Every customer is settled up. This list '
+                  'fills itself from your bills — nothing to type.'),
+              icon: Icons.verified_outlined,
+            );
+          }
+
+          final total = rows.fold<num>(0, (sum, p) => sum + p.balance);
+
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+            children: [
+              AppCard(
+                color: AppColors.danger.withValues(alpha: 0.07),
+                borderColor: AppColors.danger.withValues(alpha: 0.3),
+                child: Row(
+                  children: [
+                    const Icon(Icons.account_balance_wallet_outlined,
+                        color: AppColors.danger),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            context.t('${rows.length} people owe you'),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          Text(
+                            Fmt.money(total, symbol: symbol, decimals: false),
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.danger,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              for (final party in rows) ...[
+                _OwingCard(party: party, symbol: symbol),
+                const SizedBox(height: 8),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// One person who owes, and the three ways to reach them.
+class _OwingCard extends ConsumerWidget {
+  const _OwingCard({required this.party, required this.symbol});
+
+  final Party party;
+  final String symbol;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+      onTap: () => context.goNamed(
+        Routes.partyDetail,
+        pathParameters: {'id': party.id},
+      ),
+      child: Row(
+        children: [
+          NameAvatar(party.name, size: 40),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  party.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                Text(
+                  Fmt.money(party.balance, symbol: symbol, decimals: false),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: AppColors.danger,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (!Chase.canCall(party) && !Chase.canEmail(party))
+                  Text(
+                    // Said rather than left as an empty row, because the
+                    // shopkeeper is looking for a way to reach them and there
+                    // is one — it just has to be saved first.
+                    context.t('No phone or email saved'),
+                    style: theme.textTheme.bodySmall,
+                  ),
+              ],
+            ),
+          ),
+          ChaseButtons(party: party, symbol: symbol, dense: true),
+        ],
+      ),
+    );
+  }
+}
+
+/// The reminders somebody wrote down themselves.
+class _ToDoTab extends ConsumerWidget {
+  const _ToDoTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(remindersProvider);
     final summary = ref.watch(reminderSummaryProvider).valueOrNull;
     final symbol = ref.watch(sessionProvider).symbol;
 
-    return Scaffold(
-      appBar: AppBar(title: Text(context.t('Reminders'))),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => showReminderSheet(context, ref),
-        icon: const Icon(Icons.add_alert_outlined),
-        label: Text(context.t('Remind me')),
-      ),
-      body: RefreshIndicator(
+    return RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(remindersProvider);
           ref.invalidate(reminderSummaryProvider);
@@ -72,7 +249,6 @@ class RemindersScreen extends ConsumerWidget {
                     ],
                   ],
                 ),
-        ),
       ),
     );
   }

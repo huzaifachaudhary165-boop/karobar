@@ -563,6 +563,23 @@ final unitsProvider = StreamProvider<List<Unit>>((ref) {
   return _cachedThenFresh<List<Unit>>((emit) => repository.units(onCached: emit));
 });
 
+/// Everybody who still owes the shop money.
+///
+/// Its own provider rather than a filter on the parties list: this is a list
+/// somebody works *through*, largest first, and it must not change under them
+/// because a search box elsewhere was typed into.
+final owingPartiesProvider = FutureProvider.autoDispose<List<Party>>((ref) async {
+  final page = await ref.watch(partyRepositoryProvider).list(
+        onlyReceivable: true,
+        size: 100,
+      );
+  final rows = page.items.where((p) => p.balance > 0).toList()
+    // Biggest first. A shop chasing debts starts at the top of that list, not
+    // at whoever happens to be alphabetically first.
+    ..sort((a, b) => b.balance.compareTo(a.balance));
+  return rows;
+});
+
 /// What is still to be done.
 final remindersProvider = StreamProvider.autoDispose<List<Reminder>>((ref) {
   final repository = ref.watch(reminderRepositoryProvider);

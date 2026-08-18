@@ -6,6 +6,7 @@ import '../../core/l10n/strings.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/screen.dart';
+import '../../core/widgets/rail_calculator.dart';
 import '../../core/widgets/common.dart';
 import '../../core/widgets/karobar_logo.dart';
 import '../../providers.dart';
@@ -225,12 +226,16 @@ class _SideRail extends StatelessWidget {
     //
     // No logo either: the app bar already carries the shop's name and mark
     // directly above this, and two of them a centimetre apart is one too many.
+    // Wide enough for a four-column keypad and no wider. The rail was 84 and
+    // the space under the destinations ran empty to the bottom of the window;
+    // a shopkeeper on a laptop keeps a calculator open beside their work
+    // anyway, so it goes there rather than nowhere.
     return NavigationRail(
       selectedIndex: index,
       onDestinationSelected: onSelect,
       labelType: NavigationRailLabelType.all,
-      minWidth: 84,
-      groupAlignment: -0.9,
+      minWidth: 172,
+      groupAlignment: -1,
       leading: Padding(
         padding: const EdgeInsets.only(top: 12, bottom: 6),
         child: FloatingActionButton.small(
@@ -240,6 +245,13 @@ class _SideRail extends StatelessWidget {
           elevation: 1,
           tooltip: labels.get('assistant'),
           child: const Icon(Icons.auto_awesome, size: 20),
+        ),
+      ),
+      // Pinned under the destinations, in the space that was doing nothing.
+      trailing: const Expanded(
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: SingleChildScrollView(child: RailCalculator()),
         ),
       ),
       destinations: [
