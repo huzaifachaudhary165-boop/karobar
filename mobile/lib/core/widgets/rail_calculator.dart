@@ -15,7 +15,15 @@ import '../../data/models.dart' show trimZeros;
 /// is a screen you go to on purpose. This is the one you glance at mid-bill:
 /// digits, four operations, percent, and nothing to learn.
 class RailCalculator extends StatefulWidget {
-  const RailCalculator({super.key});
+  const RailCalculator({super.key, this.width = 172});
+
+  /// Its own width, because the slot it sits in does not give it one.
+  ///
+  /// `NavigationRail` hands `trailing` unbounded width, so a child that
+  /// stretches — as a keypad must — asks for infinity and throws during
+  /// layout. That took the whole screen down once already: the app bar painted
+  /// and everything under it was black.
+  final double width;
 
   @override
   State<RailCalculator> createState() => _RailCalculatorState();
@@ -136,7 +144,9 @@ class _RailCalculatorState extends State<RailCalculator> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Padding(
+    return SizedBox(
+      width: widget.width,
+      child: Padding(
       padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -217,6 +227,7 @@ class _RailCalculatorState extends State<RailCalculator> {
               ),
             ),
         ],
+      ),
       ),
     );
   }

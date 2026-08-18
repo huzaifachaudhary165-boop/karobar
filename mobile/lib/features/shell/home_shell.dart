@@ -247,13 +247,15 @@ class _SideRail extends StatelessWidget {
           child: const Icon(Icons.auto_awesome, size: 20),
         ),
       ),
-      // Pinned under the destinations, in the space that was doing nothing.
-      trailing: const Expanded(
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: SingleChildScrollView(child: RailCalculator()),
-        ),
-      ),
+      // In the space under the destinations, which was running empty to the
+      // bottom of the window.
+      //
+      // Plainly, with no Expanded. NavigationRail already puts leading,
+      // destinations and trailing in a Column inside a scroll view, and a flex
+      // child there has unbounded height — which threw during layout and left
+      // the app bar painted over a black screen, with nothing in the analyzer
+      // or the other tests able to see it.
+      trailing: const RailCalculator(),
       destinations: [
         NavigationRailDestination(
           icon: const Icon(Icons.dashboard_outlined),
