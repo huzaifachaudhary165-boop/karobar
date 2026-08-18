@@ -28,6 +28,23 @@ Future<double?> showCalculator(
   );
 }
 
+/// The keypad itself, without the sheet around it.
+///
+/// Shown inline on the calculator screen's first tab and inside the bottom
+/// sheet when a field asks for a number. [onUse] is what makes it the second
+/// of those: with it, the answer is handed back; without it, there is nothing
+/// to hand it to and the button is left off.
+class CalculatorPad extends StatefulWidget {
+  const CalculatorPad({super.key, this.start, this.title, this.onUse});
+
+  final double? start;
+  final String? title;
+  final ValueChanged<double>? onUse;
+
+  @override
+  State<CalculatorPad> createState() => _CalculatorPadState();
+}
+
 class _CalculatorSheet extends StatefulWidget {
   const _CalculatorSheet({this.start, this.title});
 
@@ -38,7 +55,17 @@ class _CalculatorSheet extends StatefulWidget {
   State<_CalculatorSheet> createState() => _CalculatorSheetState();
 }
 
+/// The sheet is the pad plus a way back out with the answer.
 class _CalculatorSheetState extends State<_CalculatorSheet> {
+  @override
+  Widget build(BuildContext context) => CalculatorPad(
+        start: widget.start,
+        title: widget.title,
+        onUse: (value) => Navigator.pop(context, value),
+      );
+}
+
+class _CalculatorPadState extends State<CalculatorPad> {
   /// What is on the display right now, as typed.
   String _entry = '0';
 
@@ -138,6 +165,20 @@ class _CalculatorSheetState extends State<_CalculatorSheet> {
       _fresh = true;
     });
   }
+
+  /// The plain percent key, meaning what a shop means by it.
+  ///
+  /// With a sum waiting it is a share of the left-hand side, so "1000 − 10 %"
+  /// takes off 100. A scientific calculator gives 0.1 there, which is not what
+  /// anybody at a counter is asking for. On its own it divides by a hundred.
+  void _sharePercent() => setState(() {
+        if (_pending != null && _operator != null) {
+          _entry = trimZeros(_pending! * _value / 100);
+        } else {
+          _entry = trimZeros(_value / 100);
+        }
+        _fresh = false;
+      });
 
   /// Adds or removes a percentage of what is on the display.
   ///
@@ -239,11 +280,11 @@ class _CalculatorSheetState extends State<_CalculatorSheet> {
             const SizedBox(height: 6),
 
             for (final row in const [
-              ['C', '⌫', '÷', '×'],
-              ['7', '8', '9', '-'],
-              ['4', '5', '6', '+'],
-              ['1', '2', '3', '='],
-              ['0', '.', '000', ''],
+              ['C', '⌫', '%', '÷'],
+              ['7', '8', '9', '×'],
+              ['4', '5', '6', '-'],
+              ['1', '2', '3', '+'],
+              ['0', '.', '000', '='],
             ])
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
@@ -264,20 +305,24 @@ class _CalculatorSheetState extends State<_CalculatorSheet> {
                 ),
               ),
 
-            const SizedBox(height: 2),
-            SizedBox(
-              height: 46,
-              child: FilledButton.icon(
-                onPressed: () {
-                  // Settle any half-finished sum first, so "12 × 8" then Use
-                  // hands back 96 rather than the 8 still on the display.
-                  _equals();
-                  Navigator.pop(context, _value);
-                },
-                icon: const Icon(Icons.check, size: 18),
-                label: Text(context.t('Use this number')),
+            // Only when there is somewhere to hand the answer back to. On the
+            // calculator screen the answer is the point in itself.
+            if (widget.onUse != null) ...[
+              const SizedBox(height: 2),
+              SizedBox(
+                height: 46,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    // Settle any half-finished sum first, so "12 × 8" then Use
+                    // hands back 96 rather than the 8 still on the display.
+                    _equals();
+                    widget.onUse!(_value);
+                  },
+                  icon: const Icon(Icons.check, size: 18),
+                  label: Text(context.t('Use this number')),
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
@@ -292,6 +337,8 @@ class _CalculatorSheetState extends State<_CalculatorSheet> {
         _back();
       case '=':
         _equals();
+      case '%':
+        _sharePercent();
       case '+' || '-' || '×' || '÷':
         _operate(key);
       case '000':

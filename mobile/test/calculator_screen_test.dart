@@ -43,6 +43,24 @@ void main() {
     }
   });
 
+  testWidgets('the keypad is there on arrival, not behind a button',
+      (tester) async {
+    // Somebody who tapped Calculator has already said what they want. An
+    // "open the keypad" button is a step that exists for no reason.
+    await open(tester);
+
+    for (final key in ['7', '8', '9', '=', '%']) {
+      expect(find.widgetWithText(InkWell, key), findsOneWidget, reason: key);
+    }
+  });
+
+  testWidgets('and it has no "use this number" button here', (tester) async {
+    // There is nowhere to hand the answer back to on this screen — the answer
+    // is the point in itself.
+    await open(tester);
+    expect(find.text('Use this number'), findsNothing);
+  });
+
   group('price and margin', () {
     testWidgets('a 20% margin on a 100 cost gives 125, not 120',
         (tester) async {

@@ -75,34 +75,19 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen>
 }
 
 /// The plain one, for when the sum is just a sum.
+///
+/// The keypad itself, not a button that opens one. Somebody who taps
+/// Calculator has already said what they want; asking them to tap again is a
+/// step that exists for no reason.
 class _KeypadTab extends StatelessWidget {
   const _KeypadTab();
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.calculate_outlined,
-                size: 46, color: AppColors.primary),
-            const SizedBox(height: 12),
-            Text(
-              context.t('Add, multiply, take a percentage off — with every '
-                  'step kept so you can check it.'),
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 18),
-            FilledButton.icon(
-              onPressed: () => showCalculator(context, title: 'Calculator'),
-              icon: const Icon(Icons.grid_view_rounded, size: 18),
-              label: Text(context.t('Open the keypad')),
-            ),
-          ],
-        ),
+    return const SingleChildScrollView(
+      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      child: Center(
+        child: SizedBox(width: 420, child: CalculatorPad()),
       ),
     );
   }

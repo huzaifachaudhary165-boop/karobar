@@ -81,6 +81,34 @@ void main() {
     });
   });
 
+  group('the percent key', () {
+    testWidgets('takes a share of the left-hand side, not of one', (tester) async {
+      // "1000 − 10 %" takes off 100. A scientific calculator gives 0.1 here,
+      // which is not what anybody at a counter is asking for.
+      await open(tester);
+      await press(tester, ['1', '0', '0', '0', '-', '1', '0', '%', '=']);
+      await use(tester);
+
+      expect(handedBack, 900);
+    });
+
+    testWidgets('adds tax on top the same way', (tester) async {
+      await open(tester);
+      await press(tester, ['1', '0', '0', '0', '+', '1', '7', '%', '=']);
+      await use(tester);
+
+      expect(handedBack, 1170);
+    });
+
+    testWidgets('on its own it divides by a hundred', (tester) async {
+      await open(tester);
+      await press(tester, ['5', '0', '%']);
+      await use(tester);
+
+      expect(handedBack, 0.5);
+    });
+  });
+
   group('the two percentages a shop actually uses', () {
     testWidgets('taking a discount off', (tester) async {
       await open(tester);
