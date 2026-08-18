@@ -48,7 +48,7 @@ class RemindersScreen extends ConsumerWidget {
         floatingActionButton: Consumer(
           builder: (context, ref, _) => FloatingActionButton.extended(
             onPressed: () => showReminderSheet(context, ref),
-            icon: const Icon(Icons.add_alert_outlined),
+            icon: const Icon(Icons.add_alarm),
             label: Text(context.t('Remind me')),
           ),
         ),
@@ -228,7 +228,7 @@ class _ToDoTab extends ConsumerWidget {
                   message: context.t('Put anything here you do not want to '
                       'forget — money to collect, a supplier to call, stock to '
                       'order. You will be told when it is time.'),
-                  icon: Icons.notifications_none,
+                  icon: Icons.alarm_off,
                   actionLabel: context.t('Add the first one'),
                   onAction: () => showReminderSheet(context, ref),
                 )

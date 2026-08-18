@@ -150,7 +150,7 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                   const Divider(height: 1),
                   ListTile(
-                    leading: const Icon(Icons.notifications_active_outlined),
+                    leading: const Icon(Icons.alarm),
                     title: Text(context.t('Reminders')),
                     subtitle: const Text('Anything you do not want to forget'),
                     trailing: const Icon(Icons.chevron_right),

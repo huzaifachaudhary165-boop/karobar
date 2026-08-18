@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karobar/core/widgets/rail_calculator.dart';
 
 /// The rail has to lay out, not merely compile.
 ///
-/// Putting the calculator into `NavigationRail.trailing` inside an `Expanded`
-/// threw during layout and took the whole screen with it — the app bar painted
-/// and everything below it was black. Nothing in the analyzer or the other
-/// tests could see that, because it is a constraint error at run time on a
-/// widget none of them built.
+/// A calculator was once put into `NavigationRail.trailing` and threw during
+/// layout, taking the whole screen with it: the app bar painted and everything
+/// below it was black. The analyzer was clean and every other test passed,
+/// because a constraint error only happens when the real thing is assembled.
 ///
-/// So this builds the real thing, the way the shell does.
+/// The calculator is a destination of its own now, but the lesson stands — so
+/// this builds the rail the way the shell does and asserts it lays out.
 void main() {
   Future<void> pumpRail(WidgetTester tester, {required double height}) async {
     tester.view.physicalSize = Size(1400, height);
@@ -31,7 +30,6 @@ void main() {
                   padding: EdgeInsets.only(top: 12, bottom: 6),
                   child: CircleAvatar(radius: 18),
                 ),
-                trailing: const RailCalculator(),
                 destinations: const [
                   NavigationRailDestination(
                     icon: Icon(Icons.dashboard_outlined),
@@ -49,6 +47,10 @@ void main() {
                     icon: Icon(Icons.inventory_2_outlined),
                     label: Text('Items'),
                   ),
+                  NavigationRailDestination(
+                    icon: Icon(Icons.calculate_outlined),
+                    label: Text('Calculator'),
+                  ),
                 ],
               ),
               const Expanded(child: SizedBox.expand()),
@@ -60,22 +62,17 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('the rail lays out with the calculator in it', (tester) async {
+  testWidgets('the rail lays out', (tester) async {
     await pumpRail(tester, height: 900);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('and the destinations are still there', (tester) async {
+  testWidgets('all five destinations are there', (tester) async {
     await pumpRail(tester, height: 900);
 
-    for (final name in ['Home', 'Parties', 'Invoices', 'Items']) {
+    for (final name in ['Home', 'Parties', 'Invoices', 'Items', 'Calculator']) {
       expect(find.text(name), findsOneWidget, reason: name);
     }
-  });
-
-  testWidgets('the calculator is reachable below them', (tester) async {
-    await pumpRail(tester, height: 900);
-    expect(find.widgetWithText(InkWell, '7'), findsOneWidget);
   });
 
   testWidgets('a short laptop window does not blow up either', (tester) async {

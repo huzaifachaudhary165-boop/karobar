@@ -6,10 +6,10 @@ import '../../core/l10n/strings.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/screen.dart';
-import '../../core/widgets/rail_calculator.dart';
 import '../../core/widgets/common.dart';
 import '../../core/widgets/karobar_logo.dart';
 import '../../providers.dart';
+import '../calculator/calculator_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../invoices/invoices_screen.dart';
 import '../items/items_screen.dart';
@@ -27,12 +27,23 @@ class HomeShell extends ConsumerStatefulWidget {
 }
 
 class _HomeShellState extends ConsumerState<HomeShell> {
+  /// The calculator is a destination like any other rather than something
+  /// tucked into the rail, because that is how a shopkeeper reaches for it —
+  /// the same tap as Invoices, and the whole module when it opens.
   static const _tabs = [
     DashboardScreen(),
     PartiesScreen(),
     InvoicesScreen(),
     ItemsScreen(),
+    CalculatorScreen(),
   ];
+
+  /// The last index the bottom bar can show.
+  ///
+  /// A phone keeps four: a fifth tab crowds a bar that is already at the
+  /// bottom of a small screen, and the dashboard has a calculator tile.
+  static const _lastCompactTab = 3;
+  static const _lastTab = 4;
 
   @override
   void initState() {
@@ -43,7 +54,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       Future.microtask(() {
         if (mounted) {
           ref.read(homeTabProvider.notifier).state =
-              widget.initialTab.clamp(0, 3);
+              widget.initialTab.clamp(0, _lastTab);
         }
       });
     }
@@ -57,13 +68,19 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     // between tabs from inside the app did nothing at all: /home to
     // /home?tab=1 reuses the same State, so the field never changed and every
     // dashboard tile, alert and assistant link looked like a dead button.
-    final index = ref.watch(homeTabProvider).clamp(0, 3);
+    // Clamped differently per layout: the rail has five destinations, the
+    // bottom bar four. Letting a phone land on tab 4 would show the calculator
+    // with no tab selected and no way back to it.
+    final wide = context.screen.usesSideRail;
+    final index = ref
+        .watch(homeTabProvider)
+        .clamp(0, wide ? _lastTab : _lastCompactTab);
 
     // A bottom bar down the full width of a desktop window puts the tabs at
     // the furthest point from where anyone is looking, a hand's width apart.
     // The same four destinations go down the side instead, where every other
     // application on that screen keeps them.
-    if (context.screen.usesSideRail) {
+    if (wide) {
       return Scaffold(
         appBar: index == 0 ? _dashboardAppBar(session) : null,
         body: Row(
@@ -234,7 +251,7 @@ class _SideRail extends StatelessWidget {
       selectedIndex: index,
       onDestinationSelected: onSelect,
       labelType: NavigationRailLabelType.all,
-      minWidth: 172,
+      minWidth: 92,
       groupAlignment: -1,
       leading: Padding(
         padding: const EdgeInsets.only(top: 12, bottom: 6),
@@ -247,15 +264,6 @@ class _SideRail extends StatelessWidget {
           child: const Icon(Icons.auto_awesome, size: 20),
         ),
       ),
-      // In the space under the destinations, which was running empty to the
-      // bottom of the window.
-      //
-      // Plainly, with no Expanded. NavigationRail already puts leading,
-      // destinations and trailing in a Column inside a scroll view, and a flex
-      // child there has unbounded height — which threw during layout and left
-      // the app bar painted over a black screen, with nothing in the analyzer
-      // or the other tests able to see it.
-      trailing: const RailCalculator(),
       destinations: [
         NavigationRailDestination(
           icon: const Icon(Icons.dashboard_outlined),
@@ -276,6 +284,11 @@ class _SideRail extends StatelessWidget {
           icon: const Icon(Icons.inventory_2_outlined),
           selectedIcon: const Icon(Icons.inventory_2),
           label: Text(labels.get('items')),
+        ),
+        NavigationRailDestination(
+          icon: const Icon(Icons.calculate_outlined),
+          selectedIcon: const Icon(Icons.calculate),
+          label: Text(labels.get('calculator')),
         ),
       ],
     );
