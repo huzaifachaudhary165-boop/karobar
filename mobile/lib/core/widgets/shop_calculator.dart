@@ -443,11 +443,13 @@ class _Key extends StatelessWidget {
       // after the numbers.
       _Kind.memory => (scheme.surfaceContainerHighest, scheme.onSurface),
       _Kind.function => (scheme.surfaceContainerHighest, scheme.onSurface),
-      // Filled, not left white on a white panel. These are the keys pressed
-      // most, and on the machine they are the ones that stand out — a digit
-      // with no edge is a digit somebody has to aim at.
       _Kind.digit => (scheme.surfaceContainerHigh, scheme.onSurface),
     };
+
+    // The digits sit pale against a pale panel, so they get the outline instead
+    // of a heavier fill: a key with no edge is a key somebody has to aim at,
+    // and these are the ones pressed most.
+    final outlined = kind == _Kind.digit;
 
     return Expanded(
       flex: flex,
@@ -455,7 +457,12 @@ class _Key extends StatelessWidget {
         height: 54,
         child: Material(
           color: background,
-          borderRadius: BorderRadius.circular(14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: outlined
+                ? BorderSide(color: theme.dividerColor)
+                : BorderSide.none,
+          ),
           child: InkWell(
             onTap: onTap,
             onLongPress: onLongPress,
