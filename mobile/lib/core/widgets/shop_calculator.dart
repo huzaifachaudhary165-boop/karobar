@@ -151,73 +151,73 @@ class _ShopCalculatorState extends State<ShopCalculator> {
         _Display(engine: _c),
         const SizedBox(height: 12),
 
-                // Memory and the running total. Set apart from the digits
-                // because they are the keys somebody reaches for deliberately,
-                // not while typing.
-                _Row(children: [
-                  _Key('MC', kind: _Kind.memory, onTap: () => _press(_c.memoryClear)),
-                  _Key('MR', kind: _Kind.memory, onTap: () => _press(_c.memoryRecall)),
-                  _Key('M−', kind: _Kind.memory, onTap: () => _press(_c.memorySubtract)),
-                  _Key('M+', kind: _Kind.memory, onTap: () => _press(_c.memoryAdd)),
-                  _Key(
-                    'GT',
-                    kind: _Kind.memory,
-                    onTap: () => _press(_c.showGrandTotal),
-                    // Held down to clear it, the way the machine does — so the
-                    // total of a long column cannot be lost by a stray tap.
-                    onLongPress: () => _press(_c.clearGrandTotal),
-                  ),
-                ]),
+        // Memory and the running total. Set apart from the digits
+        // because they are the keys somebody reaches for deliberately,
+        // not while typing.
+        _Row(children: [
+          _Key('MC', kind: _Kind.memory, onTap: () => _press(_c.memoryClear)),
+          _Key('MR', kind: _Kind.memory, onTap: () => _press(_c.memoryRecall)),
+          _Key('M−', kind: _Kind.memory, onTap: () => _press(_c.memorySubtract)),
+          _Key('M+', kind: _Kind.memory, onTap: () => _press(_c.memoryAdd)),
+          _Key(
+            'GT',
+            kind: _Kind.memory,
+            onTap: () => _press(_c.showGrandTotal),
+            // Held down to clear it, the way the machine does — so the
+            // total of a long column cannot be lost by a stray tap.
+            onLongPress: () => _press(_c.clearGrandTotal),
+          ),
+        ]),
 
-                _Row(children: [
-                  _Key('AC', kind: _Kind.clear, onTap: () => _press(_c.allClear)),
-                  _Key('C', kind: _Kind.clear, onTap: () => _press(_c.clearEntry)),
-                  _Key('⌫', kind: _Kind.clear, onTap: () => _press(_c.backspace)),
-                  _Key('√', kind: _Kind.function, onTap: () => _press(_c.squareRoot)),
-                  _Key('÷', kind: _Kind.operator, onTap: () => _press(() => _c.operate('÷'))),
-                ]),
+        _Row(children: [
+          _Key('AC', kind: _Kind.clear, onTap: () => _press(_c.allClear)),
+          _Key('C', kind: _Kind.clear, onTap: () => _press(_c.clearEntry)),
+          _Key('⌫', kind: _Kind.clear, onTap: () => _press(_c.backspace)),
+          _Key('√', kind: _Kind.function, onTap: () => _press(_c.squareRoot)),
+          _Key('÷', kind: _Kind.operator, onTap: () => _press(() => _c.operate('÷'))),
+        ]),
 
-                _Row(children: [
-                  _Key('7', onTap: () => _press(() => _c.digit('7'))),
-                  _Key('8', onTap: () => _press(() => _c.digit('8'))),
-                  _Key('9', onTap: () => _press(() => _c.digit('9'))),
-                  _Key('%', kind: _Kind.function, onTap: () => _press(_c.percent)),
-                  _Key('×', kind: _Kind.operator, onTap: () => _press(() => _c.operate('×'))),
-                ]),
+        _Row(children: [
+          _Key('7', onTap: () => _press(() => _c.digit('7'))),
+          _Key('8', onTap: () => _press(() => _c.digit('8'))),
+          _Key('9', onTap: () => _press(() => _c.digit('9'))),
+          _Key('%', kind: _Kind.function, onTap: () => _press(_c.percent)),
+          _Key('×', kind: _Kind.operator, onTap: () => _press(() => _c.operate('×'))),
+        ]),
 
-                _Row(children: [
-                  _Key('4', onTap: () => _press(() => _c.digit('4'))),
-                  _Key('5', onTap: () => _press(() => _c.digit('5'))),
-                  _Key('6', onTap: () => _press(() => _c.digit('6'))),
-                  _Key('±', kind: _Kind.function, onTap: () => _press(_c.toggleSign)),
-                  _Key('−', kind: _Kind.operator, onTap: () => _press(() => _c.operate('−'))),
-                ]),
+        _Row(children: [
+          _Key('4', onTap: () => _press(() => _c.digit('4'))),
+          _Key('5', onTap: () => _press(() => _c.digit('5'))),
+          _Key('6', onTap: () => _press(() => _c.digit('6'))),
+          _Key('±', kind: _Kind.function, onTap: () => _press(_c.toggleSign)),
+          _Key('−', kind: _Kind.operator, onTap: () => _press(() => _c.operate('−'))),
+        ]),
 
-                _Row(children: [
-                  _Key('1', onTap: () => _press(() => _c.digit('1'))),
-                  _Key('2', onTap: () => _press(() => _c.digit('2'))),
-                  _Key('3', onTap: () => _press(() => _c.digit('3'))),
-                  // Two zeros and three, because a wholesaler types thousands
-                  // and lakhs all day and every one of these is a keystroke
-                  // saved.
-                  _Key('00', onTap: () => _press(() {
-                        _c.digit('0');
-                        _c.digit('0');
-                      })),
-                  _Key('+', kind: _Kind.operator, onTap: () => _press(() => _c.operate('+'))),
-                ]),
+        _Row(children: [
+          _Key('1', onTap: () => _press(() => _c.digit('1'))),
+          _Key('2', onTap: () => _press(() => _c.digit('2'))),
+          _Key('3', onTap: () => _press(() => _c.digit('3'))),
+          // Two zeros and three, because a wholesaler types thousands
+          // and lakhs all day and every one of these is a keystroke
+          // saved.
+          _Key('00', onTap: () => _press(() {
+                _c.digit('0');
+                _c.digit('0');
+              })),
+          _Key('+', kind: _Kind.operator, onTap: () => _press(() => _c.operate('+'))),
+        ]),
 
-                _Row(
-                  last: true,
-                  children: [
-                    _Key('0', flex: 2, onTap: () => _press(() => _c.digit('0'))),
-                    _Key('.', onTap: () => _press(() => _c.digit('.'))),
-                    _Key('000', onTap: () => _press(() {
-                          _c.digit('0');
-                          _c.digit('0');
-                          _c.digit('0');
-                        })),
-                    _Key('=', kind: _Kind.equals, onTap: () => _press(_c.equals)),
+        _Row(
+          last: true,
+          children: [
+            _Key('0', flex: 2, onTap: () => _press(() => _c.digit('0'))),
+            _Key('.', onTap: () => _press(() => _c.digit('.'))),
+            _Key('000', onTap: () => _press(() {
+                  _c.digit('0');
+                  _c.digit('0');
+                  _c.digit('0');
+                })),
+            _Key('=', kind: _Kind.equals, onTap: () => _press(_c.equals)),
                   ],
                 ),
       ],
