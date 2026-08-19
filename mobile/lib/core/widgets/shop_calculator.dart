@@ -443,7 +443,10 @@ class _Key extends StatelessWidget {
       // after the numbers.
       _Kind.memory => (scheme.surfaceContainerHighest, scheme.onSurface),
       _Kind.function => (scheme.surfaceContainerHighest, scheme.onSurface),
-      _Kind.digit => (scheme.surfaceContainerLowest, scheme.onSurface),
+      // Filled, not left white on a white panel. These are the keys pressed
+      // most, and on the machine they are the ones that stand out — a digit
+      // with no edge is a digit somebody has to aim at.
+      _Kind.digit => (scheme.surfaceContainerHigh, scheme.onSurface),
     };
 
     return Expanded(
