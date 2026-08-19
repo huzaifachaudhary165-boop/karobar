@@ -157,7 +157,7 @@ class _Scheme extends ConsumerWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  context.t('This scheme costs ${trimZeros(program.costPercent)}% '
+                  context.t('This scheme costs ${percentText(program.costPercent)}% '
                       'of every sale.'),
                   style: theme.textTheme.bodySmall,
                 ),
@@ -365,7 +365,7 @@ class _SchemeFormState extends ConsumerState<_SchemeForm> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          context.t('That is ${trimZeros(double.parse(cost.toStringAsFixed(2)))}% '
+                          context.t('That is ${percentText(cost)}% '
                               'of every sale.'),
                           style: theme.textTheme.bodySmall,
                         ),

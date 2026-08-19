@@ -435,7 +435,7 @@ class _ProfitCard extends StatelessWidget {
           ),
           if (!losing && percent > 0)
             Text(
-              '${trimZeros(percent)}%',
+              '${percentText(percent)}%',
               style: theme.textTheme.titleSmall?.copyWith(color: tint),
             ),
         ],

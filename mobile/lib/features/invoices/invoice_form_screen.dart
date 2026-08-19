@@ -1400,7 +1400,7 @@ class _MarginRow extends StatelessWidget {
           if (!losing && percent > 0) ...[
             const SizedBox(width: 6),
             Text(
-              '(${trimZeros(percent)}%)',
+              '(${percentText(percent)}%)',
               style: theme.textTheme.bodySmall?.copyWith(color: tint),
             ),
           ],

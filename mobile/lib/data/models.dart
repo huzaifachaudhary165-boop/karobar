@@ -1879,6 +1879,16 @@ class RaisedBill {
 String trimZeros(num value) =>
     value == value.roundToDouble() ? value.toInt().toString() : value.toString();
 
+/// A worked-out percentage, as a shopkeeper would say it.
+///
+/// [trimZeros] is for figures that arrive off the wire already rounded. One
+/// this side of the app divides — a margin, a share of a total — comes out
+/// 28.888888888888886, and a bill reading "Profit Rs 52 (28.888888888888886%)"
+/// looks broken to the person holding it. Nobody prices to a thousandth of a
+/// percent, so one decimal place is the whole of what is useful.
+String percentText(num value) =>
+    trimZeros(double.parse(value.toStringAsFixed(1)));
+
 // ── pricing ──────────────────────────────────────────────────────
 /// A set of rates for a kind of customer — thok, parchoon, staff.
 class PriceList {
