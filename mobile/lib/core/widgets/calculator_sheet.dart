@@ -37,6 +37,9 @@ Future<double?> showCalculator(
             ],
             ShopCalculator(
               start: start,
+              // The sheet is already the panel; a second box around the keys
+              // is what pushes Use below the fold on a small phone.
+              framed: false,
               onUse: (value) => Navigator.pop(sheetContext, value),
             ),
           ],

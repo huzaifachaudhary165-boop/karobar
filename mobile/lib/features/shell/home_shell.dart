@@ -30,13 +30,17 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   /// The calculator is a destination like any other rather than something
   /// tucked into the rail, because that is how a shopkeeper reaches for it —
   /// the same tap as Invoices, and the whole module when it opens.
-  static const _tabs = [
-    DashboardScreen(),
-    PartiesScreen(),
-    InvoicesScreen(),
-    ItemsScreen(),
-    CalculatorScreen(),
-  ];
+  ///
+  /// Built for an index rather than held as a constant list: every tab is alive
+  /// at once inside the IndexedStack, and the calculator needs to know whether
+  /// it is the one being looked at before it takes the keyboard.
+  static List<Widget> _tabsFor(int index) => [
+        const DashboardScreen(),
+        const PartiesScreen(),
+        const InvoicesScreen(),
+        const ItemsScreen(),
+        CalculatorScreen(onScreen: index == _lastTab),
+      ];
 
   /// The last index the bottom bar can show.
   ///
@@ -98,7 +102,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               child: ReadableWidth(
                 maxWidth: 1200,
                 padHorizontally: false,
-                child: IndexedStack(index: index, children: _tabs),
+                child: IndexedStack(index: index, children: _tabsFor(index)),
               ),
             ),
           ],
@@ -108,7 +112,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
     return Scaffold(
       appBar: index == 0 ? _dashboardAppBar(session) : null,
-      body: IndexedStack(index: index, children: _tabs),
+      body: IndexedStack(index: index, children: _tabsFor(index)),
       floatingActionButton: FloatingActionButton(
         heroTag: 'assistant',
         onPressed: () => context.goNamed(Routes.assistant),
